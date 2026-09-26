@@ -261,7 +261,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Fragt den Player-Status ab: (existiert, freigeschaltet). NIEMALS das Passwort. */
     fun fetchPlayerStatus(playerId: String): Pair<Boolean, Boolean>? = runCatching {
-        val url = java.net.URL("https://player.smartys.tech/api/v1/player/info?mac=$playerId")
+        val url = java.net.URL("https://panel.smartys.tech/api/v1/player/info?mac=$playerId")
         val conn = url.openConnection() as javax.net.ssl.HttpsURLConnection
         conn.connectTimeout = 5000; conn.readTimeout = 5000
         if (conn.responseCode != 200) return@runCatching null
@@ -270,13 +270,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }.getOrNull()
 
     /**
-     * IBPlayer-Flow: Pairing mit player.smartys.tech (Player registriert sich
+     * IBPlayer-Flow: Pairing mit panel.smartys.tech (Player registriert sich
      * beim ersten Aufruf selbst), dann zugewiesene Playlist laden und einloggen.
      * Rückgabe true = Kanäle geladen (state -> Ready/Loading), false = noch
      * keine Playlist hinterlegt oder Backend nicht erreichbar.
      */
     fun pairAndLoad(playerId: String, pairingPw: String): Boolean = runCatching {
-        val url = java.net.URL("https://player.smartys.tech/api/v1/pair")
+        val url = java.net.URL("https://panel.smartys.tech/api/v1/pair")
         val conn = url.openConnection() as javax.net.ssl.HttpsURLConnection
         conn.requestMethod = "POST"
         conn.doOutput = true
@@ -289,7 +289,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val body = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
         val token = body.getString("token")
         // Provider-Liste des Players abrufen:
-        val purl = java.net.URL("https://player.smartys.tech/api/v1/providers")
+        val purl = java.net.URL("https://panel.smartys.tech/api/v1/providers")
         val pconn = purl.openConnection() as javax.net.ssl.HttpsURLConnection
         pconn.setRequestProperty("Authorization", "Bearer $token")
         pconn.connectTimeout = 8000; pconn.readTimeout = 8000
@@ -325,7 +325,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .put("mac", mac)
             .put("message", message)
             .put("app_version", "0.2")
-        val conn = java.net.URL("https://player.smartys.tech/api/v1/support")
+        val conn = java.net.URL("https://panel.smartys.tech/api/v1/support")
             .openConnection() as javax.net.ssl.HttpsURLConnection
         conn.requestMethod = "POST"
         conn.doOutput = true

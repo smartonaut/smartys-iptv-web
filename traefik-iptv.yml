@@ -1,17 +1,32 @@
 http:
   routers:
-    iptv:
+    player:
       rule: "Host(`player.smartys.tech`)"
       entryPoints:
         - "websecure"
-      service: iptv
+      service: player
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - sec-headers
+
+    panel:
+      rule: "Host(`panel.smartys.tech`)"
+      entryPoints:
+        - "websecure"
+      service: panel
       tls:
         certResolver: letsencrypt
       middlewares:
         - sec-headers
 
   services:
-    iptv:
+    player:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8102"
+
+    panel:
       loadBalancer:
         servers:
           - url: "http://127.0.0.1:8100"

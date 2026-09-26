@@ -1,4 +1,4 @@
-# Smartys IPTV
+# Smartys M3U Player
 
 Eigenes IPTV-System: Android-TV-Player-App + Pairing-Backend + Web-Panel.
 
@@ -9,14 +9,23 @@ Eigenes IPTV-System: Android-TV-Player-App + Pairing-Backend + Web-Panel.
 | `app/` | Player-App (Fire TV / Android TV) | Kotlin, Jetpack Compose, Media3/ExoPlayer |
 | `backend/` | Pairing-/Playlist-Backend + Admin-CLI | Python, FastAPI, SQLite |
 | `backend/templates/` | Web-Panel (Playlist-Verwaltung) | Jinja2 |
-| `site-nginx/` | Landing `smartys.tech` | nginx |
+| `site-nginx/` | Marken-Hub `smartys.tech` | nginx |
+| `site-player/` | Produktseite `player.smartys.tech` | nginx |
 | `traefik-*.yml` | Reverse-Proxy-Konfig (VPS) | Traefik |
+
+## Domains / Routing
+
+| Host | Zweck | Container (Port) |
+|------|-------|------------------|
+| `smartys.tech` | Marken-Hub (Übersicht aller Apps) | iptv-site (8101) |
+| `player.smartys.tech` | Produktseite M3U Player | player-site (8102) |
+| `panel.smartys.tech` | Web-Panel + App-API | iptv-backend (8100) |
 
 ## Wie es funktioniert (Pairing-Modell, IBPlayer-Prinzip)
 
 1. Die App generiert beim ersten Start eine **Player-ID** (Zufall, MAC-Format)
    und ein **Pairing-Passwort** — beides verschlüsselt auf dem Gerät gespeichert.
-2. Der Nutzer meldet sich auf `player.smartys.tech` mit ID + Passwort an
+2. Der Nutzer meldet sich auf `panel.smartys.tech` mit ID + Passwort an
    und hinterlegt dort seine Xtream-/M3U-Line.
 3. Die App ruft ihre Playlist-Konfiguration über die API ab und streamt.
 
@@ -34,8 +43,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-- Backend: `http://127.0.0.1:8100` (Health: `/api/v1/health`)
-- Landing: `http://127.0.0.1:8101`
+- Backend (Panel/API): `http://127.0.0.1:8100` (Health: `/api/v1/health`)
+- Hub: `http://127.0.0.1:8101`
+- Produktseite: `http://127.0.0.1:8102`
 
 ## Admin-CLI (nur auf dem VPS, via docker exec)
 
