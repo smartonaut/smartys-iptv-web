@@ -40,6 +40,7 @@ class RobustLivePlayer(ctx: Context) {
     private var onChannelDead: ((String) -> Unit)? = null
     private var reconnectAttempts = 0
     private var scheduledReconnect = false
+    private var pendingSeekMs: Long? = null
 
     init {
         player.addListener(object : Player.Listener {
@@ -57,18 +58,27 @@ class RobustLivePlayer(ctx: Context) {
                 if (state == Player.STATE_READY) {
                     reconnectAttempts = 0
                     scheduledReconnect = false
+                    // Fortsetzen: gewünschte Start-Position erst nach READY anspringen.
+                    pendingSeekMs?.let { ms ->
+                        pendingSeekMs = null
+                        if (ms > 0L) {
+                            player.seekTo(ms)
+                            Log.d("SmartysIPTV", "Fortsetzen: seekTo ${ms}ms")
+                        }
+                    }
                 }
             }
         })
     }
 
     /** Kanal abspielen. Idempotent — gleicher Kanal wird nicht doppelt angestoßen. */
-    fun playChannel(url: String, channelId: String, onDead: ((String) -> Unit)? = null) {
+    fun playChannel(url: String, channelId: String, onDead: ((String) -> Unit)? = null, startPosMs: Long = 0L) {
         currentUrl = url
         currentChannelId = channelId
         onChannelDead = onDead
         reconnectAttempts = 0
         scheduledReconnect = false
+        pendingSeekMs = if (startPosMs > 0L) startPosMs else null
         startStream()
     }
 
