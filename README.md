@@ -32,6 +32,30 @@ Eigenes IPTV-System: Android-TV-Player-App + Pairing-Backend + Web-Panel.
 Freischaltung ist getrennt vom Pairing: ein Player muss erst `activate` werden
 (siehe Admin-CLI), sonst wird der Login verweigert.
 
+## App-Features (Stand v0.3.1)
+
+**Live-TV**
+- Kategorie-Sidebar + Kanalliste mit echten Sendernlogos, EPG („Jetzt/Danach"),
+  Favoriten, Zuletzt-gesehen-Reihe, Kanaldirektwahl per Zifferntasten
+- Robuster Player (Auto-Reconnect, Puffer-Tuning), OSD unten links
+- Doppel-EPG-Quellen: Provider-XMLTV + epg.pw-Fallback (Disk-Cache, 12h/daily Refresh)
+- EPG-Grid (Tagesübersicht), Parental Control (PIN-Gate, FSK-Bewertung)
+
+**VOD (Filme & Serien)**
+- Cover-Grid mit Gold-Fokus, Kategorie-Sidebar
+- Film-/Serien-Detailseiten: Cover, Jahr, Kategorie, Sterne-Bewertung, Trailer-Button
+- **TMDB-Beschreibungen** (deutsch) über Backend-Proxy — der TMDB-API-Key liegt
+  ausschließlich im Backend-Env (`TMDB_API_KEY`), nie in der App; 24h-Disk-Cache
+- **Kategorie-Verwaltung**: OK-Taste auf einer VOD-Kategorie lange drücken
+  => Menü „Nach oben / Nach unten / Ausblenden / Alle einblenden"
+  (Sortierung + Ausblendung pro Bereich Filme/Serien persistiert)
+- Kategoriewahl + Suche überleben das Öffnen/Schließen einer Detailseite
+
+**Pairing / Account**
+- Pairing-Screen beim ersten Start (Player-ID + Passwort, beides gerätegeneriert)
+- Selbst-Registrierung beim ersten Web-Login (IBPlayer-Modell)
+- Einstellungen: Player-ID/Status, Cache-Größe + Löschen, Support-Formular
+
 ## Backend lokal starten
 
 ```bash

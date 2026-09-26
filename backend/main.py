@@ -6,6 +6,8 @@ Security: Argon2, AES-GCM, Session-Cookies (HttpOnly, Secure), Rate-Limit am Log
 import os
 import time
 import secrets
+import json
+from pathlib import Path
 from fastapi import FastAPI, Request, Form, HTTPException, Depends
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -45,7 +47,7 @@ def login_page(request: Request):
 
 @app.post("/login")
 def login(request: Request, mac: str = Form(...), password: str = Form(...)):
-    mac = mac.strip().upper()
+    mac = db.normalize_mac(mac)
     if _rate_limited(mac):
         raise HTTPException(status_code=429, detail="Zu viele Versuche. Bitte später erneut.")
     if not db.verify_pairing_auto(mac, password):
@@ -178,7 +180,7 @@ async def api_pair(mac: str = None, password: str = None, request: Request = Non
             pass
     if not mac or not password:
         raise HTTPException(422, "mac und password erforderlich")
-    mac = mac.strip().upper()
+    mac = db.normalize_mac(mac)
     if _rate_limited("api:" + mac):
         raise HTTPException(429)
     if not db.verify_pairing_auto(mac, password):
@@ -218,9 +220,9 @@ def api_player_info(mac: str):
     SICHERHEIT: Gibt NIEMALS das Pairing-Passwort zurueck (das sah/frueher die
     unsichere Variante). Nur: existiert der Player + ist er freigeschaltet?
     Passwort sieht der User nur im Web-Login bzw. via Admin-CLI."""
-    p = db.get_player(mac.strip().upper())
+    p = db.get_player(db.normalize_mac(mac))
     if not p:
-        return {"mac": mac.upper(), "exists": False, "active": False}
+        return {"mac": db.normalize_mac(mac), "exists": False, "active": False}
     return {"mac": p["mac"], "exists": True, "active": bool(p["active"]),
             "name": p["name"]}
 
@@ -246,6 +248,48 @@ async def api_redeem(request: Request):
 
 
 SUPPORT_FILE = os.environ.get("IPTV_SUPPORT_FILE", "/data/support.log")
+
+
+# ---------- TMDB-Metadaten-Proxy (Key bleibt im Backend-Env, nie im Client) ----------
+
+TMDB_CACHE_DIR = Path("/data/tmdb_cache")
+
+
+@app.get("/api/v1/tmdb/movie/{tmdb_id}")
+def api_tmdb_movie(tmdb_id: str):
+    """Proxy für TMDB-Filmdaten: Beschreibung, Genres, Laufzeit, Backdrop.
+    Der TMDB-API-Key liegt nur hier im Env — die App bekommt ihn nie zu sehen.
+    Antworten werden 24h auf Disk gecacht."""
+    api_key = os.environ.get("TMDB_API_KEY", "")
+    if not api_key:
+        raise HTTPException(503, "TMDB nicht konfiguriert (TMDB_API_KEY fehlt)")
+    if not tmdb_id.isdigit():
+        raise HTTPException(400, "Ungültige TMDB-ID")
+
+    cache_file = TMDB_CACHE_DIR / f"movie_{tmdb_id}.json"
+    try:
+        if cache_file.exists():
+            age = time.time() - cache_file.stat().st_mtime
+            if age < 24 * 3600:
+                return json.loads(cache_file.read_text())
+    except Exception:
+        pass
+
+    import urllib.request
+    url = (f"https://api.themoviedb.org/3/movie/{tmdb_id}"
+           f"?api_key={api_key}&language=de-DE&append_to_response=")
+    try:
+        with urllib.request.urlopen(url, timeout=8) as r:
+            data = json.loads(r.read())
+    except Exception:
+        raise HTTPException(502, "TMDB nicht erreichbar")
+
+    try:
+        TMDB_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps(data))
+    except Exception:
+        pass  # Cache ist optional
+    return data
 
 
 @app.post("/api/v1/support")

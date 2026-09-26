@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppCtx.set(this)
 
         // Debug/Auto-Login per Start-Extra (z.B. via adb):
         // am start -n com.smartys.iptv/.MainActivity --es url http://tv.smarty.tips --es user X --es pass Y
@@ -61,9 +62,22 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     val appCtx = androidx.compose.ui.platform.LocalContext.current
     val player = remember { mutableStateOf<RobustLivePlayer?>(null) }
     val playing = remember { mutableStateOf<LiveStream?>(null) }
+    val vodPlaying = remember { mutableStateOf<VodPlayback?>(null) }
+    val openSeries = remember { mutableStateOf<SeriesStream?>(null) }
+    val openMovie = remember { mutableStateOf<VodStream?>(null) }
+    // VOD-Kategorie-Wahl hier in App() heben: MovieGrid/SeriesGrid werden beim
+    // Oeffnen einer Detailseite aus dem Baum ENTFERNT (when-Zweig) — ein Zustand
+    // innerhalb der Grids ueberlebt das nicht. Von hier aus ueberlebt er alles.
+    val movieCat = remember { mutableStateOf<String?>(null) }
+    val seriesCat = remember { mutableStateOf<String?>(null) }
+    // Parental Control: PIN-Gate beim Start
+    var pinUnlocked by remember { mutableStateOf(!ParentalControl.isEnabled(appCtx)) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
+    // Haupt-Tab: live | movies | series
+    var mainTab by remember { mutableStateOf("live") }
+    var showEpg by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val ctx = appCtx
@@ -79,16 +93,31 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         onDispose { player.value?.release() }
     }
 
-    val play: (LiveStream) -> Unit = { channel ->
-        val c = vm.creds
-        if (c != null) {
-            playing.value = channel
-            vm.markWatched(channel.streamId)
-            player.value?.playChannel(c.streamUrl(channel.streamId), channel.streamId)
+    // VOD + Serien nach erfolgreichem Login laden
+    LaunchedEffect(vm.state) {
+        if (vm.state is AppState.Ready) {
+            vm.loadVod()
+            vm.loadSeries()
         }
     }
 
-    when (val s = vm.state) {
+    val play: (LiveStream) -> Unit = { channel ->
+        val url = vm.streamUrlFor(channel)
+        if (url != null) {
+            playing.value = channel
+            vm.markWatched(channel.streamId)
+            player.value?.playChannel(url, channel.streamId)
+        }
+    }
+
+    val playVod: (VodPlayback) -> Unit = { vod ->
+        vodPlaying.value = vod
+        player.value?.playChannel(vod.url, "vod:${vod.title}")
+    }
+
+    if (!pinUnlocked) {
+        PinGate(onUnlocked = { pinUnlocked = true })
+    } else when (val s = vm.state) {
         is AppState.NeedsLogin -> PairingScreen(vm)
         is AppState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -103,28 +132,128 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         }
         is AppState.Ready -> {
             val cur = playing.value
-            if (showSettings) {
-                SettingsScreen(vm = vm, onClose = { showSettings = false })
-            } else if (cur != null) {
-                PlayerScreen(
+            val vodCur = vodPlaying.value
+            val seriesCur = openSeries.value
+            val movieCur = openMovie.value
+            when {
+                showSettings -> SettingsScreen(vm = vm, onClose = { showSettings = false })
+                showEpg -> EpgGrid(
+                    vm = vm, channels = s.channels,
+                    onPlay = play,
+                    onBack = { showEpg = false }
+                )
+                cur != null -> PlayerScreen(
                     vm = vm, player = player.value?.player, channel = cur,
                     channels = s.channels,
                     onPlay = play,
                     onBack = { playing.value = null; player.value?.stop() }
                 )
-            } else {
-                ChannelGrid(
-                    vm = vm,
-                    categories = s.categories,
-                    channels = s.channels,
-                    searchQuery = searchQuery,
-                    selectedCategory = selectedCategory,
-                    onSearch = { searchQuery = it },
-                    onSelectCategory = { selectedCategory = it },
-                    onPlay = play,
-                    onOpenSettings = { showSettings = true }
+                vodCur != null -> VodPlayerScreen(
+                    vod = vodCur, player = player.value?.player,
+                    onBack = { vodPlaying.value = null; player.value?.stop() }
+                )
+                movieCur != null -> MovieDetail(
+                    vm = vm, movie = movieCur,
+                    onPlay = playVod,
+                    onBack = { openMovie.value = null }
+                )
+                seriesCur != null -> SeriesDetail(
+                    vm = vm, show = seriesCur,
+                    onPlay = playVod,
+                    onBack = { openSeries.value = null }
+                )
+                else -> {
+                    Column(Modifier.fillMaxSize()) {
+                        MainTabs(current = mainTab, onChange = { mainTab = it })
+                        when (mainTab) {
+                            "movies" -> MovieGrid(
+                                vm = vm, categories = vm.vodCategories, movies = vm.vodMovies,
+                                selectedCategory = movieCat.value,
+                                onSelectCategory = { movieCat.value = it },
+                                onOpen = { openMovie.value = it },
+                                onBack = { mainTab = "live" },
+                                onOpenSettings = { showSettings = true }
+                            )
+                            "series" -> SeriesGrid(
+                                vm = vm, categories = vm.seriesCategories, shows = vm.seriesShows,
+                                selectedCategory = seriesCat.value,
+                                onSelectCategory = { seriesCat.value = it },
+                                onOpen = { openSeries.value = it },
+                                onBack = { mainTab = "live" },
+                                onOpenSettings = { showSettings = true }
+                            )
+                            else -> ChannelGrid(
+                                vm = vm,
+                                categories = s.categories,
+                                channels = s.channels,
+                                searchQuery = searchQuery,
+                                selectedCategory = selectedCategory,
+                                onSearch = { searchQuery = it },
+                                onSelectCategory = { selectedCategory = it },
+                                onPlay = play,
+                                onOpenSettings = { showSettings = true },
+                                onOpenEpg = { showEpg = true }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MainTabs(current: String, onChange: (String) -> Unit) {
+    val tabs = listOf("live" to "Live-TV", "movies" to "Filme", "series" to "Serien")
+    Row(
+        Modifier.fillMaxWidth().background(Color(0xFF0B0E14)).padding(horizontal = 32.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        tabs.forEach { (key, label) ->
+            val active = current == key
+            var focused by remember { mutableStateOf(false) }
+            Surface(
+                onClick = { onChange(key) },
+                shape = RoundedCornerShape(10.dp),
+                color = if (active) Color(0xFFFFC94D) else Color(0xFF11172A),
+                border = androidx.compose.foundation.BorderStroke(
+                    if (focused || active) 2.dp else 1.dp,
+                    when {
+                        focused -> Color(0xFFFFC94D)
+                        active -> Color(0xFFFFC94D)
+                        else -> Color(0xFF232C42)
+                    }
+                ),
+                modifier = Modifier
+                    .onFocusChanged { focused = it.isFocused }
+                    .focusable()
+            ) {
+                Text(
+                    label,
+                    color = when {
+                        active -> Color(0xFF0B0E14)
+                        focused -> Color(0xFFE8EEFC)
+                        else -> Color(0xFF8FA3C8)
+                    },
+                    fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 22.dp, vertical = 9.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun VodPlayerScreen(vod: VodPlayback, player: ExoPlayer?, onBack: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply { this.player = player; useController = true }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+        TextButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).padding(16.dp)) {
+            Text("← ${vod.title}", color = Color.White, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -215,6 +344,12 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             }
             Spacer(Modifier.height(18.dp))
 
+            // ---- Kindersicherung ----
+            Section("Kindersicherung") {
+                PinSettings()
+            }
+            Spacer(Modifier.height(18.dp))
+
             // ---- Support ----
             Section("Support") {
                 if (supportState != null) {
@@ -247,7 +382,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             }
             Spacer(Modifier.height(18.dp))
             Text(
-                "Smartys M3U Player v0.2 · panel.smartys.tech",
+                "Smarty Player v0.3 · panel.smartys.tech",
                 color = Color(0xFF4D5B78), fontSize = 11.sp
             )
         }
@@ -305,7 +440,7 @@ fun PairingScreen(vm: MainViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Smartys IPTV", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
+        Text("Smarty Player", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
         Spacer(Modifier.height(4.dp))
         Text("Player freischalten", color = Color.Gray, fontSize = 15.sp)
         Spacer(Modifier.height(28.dp))
@@ -374,7 +509,8 @@ fun ChannelGrid(
     onSearch: (String) -> Unit,
     onSelectCategory: (String?) -> Unit,
     onPlay: (LiveStream) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenEpg: () -> Unit = {}
 ) {
     var favMode by remember { mutableStateOf(false) }
     val catListState = rememberLazyListState()
@@ -500,6 +636,10 @@ fun ChannelGrid(
                     }
                 }
                 Spacer(Modifier.width(14.dp))
+                TextButton(onClick = onOpenEpg) {
+                    Text("📅", fontSize = 22.sp, color = Color(0xFF8FA3C8))
+                }
+                Spacer(Modifier.width(6.dp))
                 TextButton(onClick = onOpenSettings) {
                     Text("⚙", fontSize = 22.sp, color = Color(0xFF8FA3C8))
                 }
@@ -669,6 +809,7 @@ fun PlayerScreen(
     onBack: () -> Unit
 ) {
     var showOverlay by remember { mutableStateOf(true) }
+    var showReplay by remember { mutableStateOf(false) }
     val xmltvReady = vm.xmltvReady.value
     val epgInfo = remember(channel.streamId, xmltvReady) { vm.nowNext(channel) }
 
@@ -843,11 +984,83 @@ fun PlayerScreen(
                     "↑/↓ zappen · Nummer tippen = Direktwahl · OK Info · Zurück = Liste",
                     color = Color(0xFF5A6B8C), fontSize = 11.sp
                 )
+                if (channel.hasArchive()) {
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        onClick = { showReplay = true },
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF141A2A),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
+                    ) {
+                        Text(
+                            "⏪ Replay — letzte ${channel.archiveHours()} Std.",
+                            color = Color(0xFFFFC94D), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                        )
+                    }
+                }
             }
             TextButton(
                 onClick = onBack,
                 modifier = Modifier.align(Alignment.TopEnd).padding(24.dp)
             ) { Text("← Zurück", color = Color.White) }
+        }
+
+        // ---- Catch-up / Replay-Dialog ----
+        if (showReplay) {
+            ReplayDialog(
+                channel = channel,
+                vm = vm,
+                onJump = { offsetMinutes ->
+                    val c = vm.creds ?: return@ReplayDialog
+                    val startEpoch = (System.currentTimeMillis() / 1000) - offsetMinutes * 60L
+                    val url = c.timeshiftUrl(channel.streamId, startEpoch, channel.archiveHours())
+                    player?.setMediaItem(MediaItem.fromUri(url))
+                    player?.prepare()
+                    player?.play()
+                    showReplay = false
+                },
+                onClose = { showReplay = false }
+            )
+        }
+    }
+}
+
+@Composable
+fun ReplayDialog(channel: LiveStream, vm: MainViewModel, onJump: (Int) -> Unit, onClose: () -> Unit) {
+    val jumps = listOf(
+        "Jetzt (Live)" to 0,
+        "-10 Min" to 10,
+        "-30 Min" to 30,
+        "-1 Std." to 60,
+        "-2 Std." to 120
+    )
+    Box(Modifier.fillMaxSize().background(Color(0x99000000))) {
+        Column(
+            Modifier
+                .align(Alignment.Center)
+                .width(460.dp)
+                .background(Color(0xFF0B0E14), RoundedCornerShape(16.dp))
+                .padding(24.dp)
+        ) {
+            Text("Replay", color = Color(0xFFE8EEFC), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(channel.name, color = Color(0xFF6B7A99), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(16.dp))
+            jumps.forEach { (label, mins) ->
+                Surface(
+                    onClick = { onJump(mins) },
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF141A2A),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                ) {
+                    Text(label, color = Color(0xFFE8EEFC), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            TextButton(onClick = onClose, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                Text("Schließen", color = Color(0xFF8FA3C8))
+            }
         }
     }
 }
