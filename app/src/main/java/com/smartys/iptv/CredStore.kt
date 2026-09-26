@@ -14,6 +14,7 @@ object CredStore {
     private const val K_URL = "provider_url"
     private const val K_USER = "username"
     private const val K_PASS = "password"
+    private const val K_PROVIDERS = "providers_json"
     private const val K_PLAYER_ID = "player_id"
     private const val K_PAIRING_PW = "pairing_pw"
 
@@ -78,16 +79,40 @@ object CredStore {
     }
 
     fun save(ctx: Context, url: String, user: String, pass: String) {
-        prefs(ctx).edit()
-            .putString(K_URL, url.trim().trimEnd('/'))
-            .putString(K_USER, user.trim())
-            .putString(K_PASS, pass)
-            .apply()
+        saveAll(ctx, listOf(Creds(url, user, pass)))
+    }
+
+    /** Speichert eine Liste von Providern (verschlüsselt, als JSON). */
+    fun saveAll(ctx: Context, providers: List<Creds>) {
+        val arr = org.json.JSONArray()
+        providers.forEach { c ->
+            arr.put(org.json.JSONObject().put("url", c.url).put("user", c.user).put("pass", c.pass))
+        }
+        prefs(ctx).edit().putString(K_PROVIDERS, arr.toString()).apply()
+        // Legacy-Einzelfelder weiterhin pflegen (primary = erster) für Rückwärtskompatibilität
+        val first = providers.firstOrNull()
+        if (first != null) {
+            prefs(ctx).edit()
+                .putString(K_URL, first.url.trim().trimEnd('/'))
+                .putString(K_USER, first.user.trim())
+                .putString(K_PASS, first.pass)
+                .apply()
+        }
     }
 
     data class Creds(val url: String, val user: String, val pass: String) {
         fun streamUrl(streamId: String, ext: String = "m3u8"): String =
             "$url/live/$user/$pass/$streamId.$ext"
+
+        fun movieUrl(streamId: String, ext: String = "mp4"): String =
+            "$url/movie/$user/$pass/$streamId.$ext"
+
+        fun seriesUrl(episodeId: String, ext: String = "mp4"): String =
+            "$url/series/$user/$pass/$episodeId.$ext"
+
+        /** Catch-up/Timeshift: start=Unix-Sekunden, duration=Archiv-Stunden. */
+        fun timeshiftUrl(streamId: String, startEpoch: Long, durationHours: Int): String =
+            "$url/timeshift/$user/$pass/$durationHours/$startEpoch/$streamId.m3u8"
     }
 
     fun load(ctx: Context): Creds? {
@@ -96,6 +121,23 @@ object CredStore {
         val user = p.getString(K_USER, null) ?: return null
         val pass = p.getString(K_PASS, null) ?: return null
         return Creds(url, user, pass)
+    }
+
+    /** Lädt ALLE gespeicherten Provider (JSON); Fallback auf Legacy-Einzelfeld. */
+    fun loadAll(ctx: Context): List<Creds> {
+        val p = prefs(ctx)
+        val json = p.getString(K_PROVIDERS, null)
+        if (json != null) {
+            return runCatching {
+                val arr = org.json.JSONArray(json)
+                (0 until arr.length()).map { i ->
+                    val o = arr.getJSONObject(i)
+                    Creds(o.getString("url"), o.getString("user"), o.getString("pass"))
+                }
+            }.getOrDefault(emptyList())
+        }
+        // Fallback: alter Einzel-Provider
+        return load(ctx)?.let { listOf(it) } ?: emptyList()
     }
 
     fun clear(ctx: Context) = prefs(ctx).edit().clear().commit()

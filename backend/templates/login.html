@@ -29,7 +29,7 @@
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
     <form method="post" action="/login">
       <label for="mac">MAC-Adresse des Players</label>
-      <input id="mac" name="mac" placeholder="AA:BB:CC:11:22:33" required autofocus>
+      <input id="mac" name="mac" placeholder="AA:BB:CC:11:22:33" required autofocus autocomplete="off" spellcheck="false">
       <label for="password">Pairing-Passwort</label>
       <input id="password" name="password" type="password" placeholder="Vom Player angezeigt" required>
       <button type="submit">Anmelden</button>
@@ -39,5 +39,19 @@
       <b>Einstellungen → Mein Player</b>
     </div>
   </div>
+<script>
+(function(){
+  var mac = document.getElementById('mac');
+  mac.addEventListener('input', function(){
+    var raw = mac.value.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+    var out = '';
+    for (var i = 0; i < raw.length && i < 12; i++) {
+      if (i > 0 && i % 2 === 0) out += ':';
+      out += raw[i];
+    }
+    mac.value = out;
+  });
+})();
+</script>
 </body>
 </html>

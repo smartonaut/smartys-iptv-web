@@ -281,6 +281,26 @@ object XmltvEpg {
         return nowAndNextFrom(progs, now)
     }
 
+    /** Komplette sortierte Programmliste eines Kanals (fürs EPG-Grid). */
+    fun programmesFor(channelId: String?): List<XmltvProgramme> {
+        if (channelId.isNullOrBlank()) return emptyList()
+        return synchronized(index) { index[channelId]?.toList() } ?: emptyList()
+    }
+
+    /** Komplette Programmliste eines Kanals per normalisiertem Name (Fallback). */
+    fun programmesForName(channelName: String?): List<XmltvProgramme> {
+        if (channelName.isNullOrBlank()) return emptyList()
+        val key = normName(channelName)
+        return synchronized(fallbackIndex) { fallbackIndex[key]?.toList() } ?: emptyList()
+    }
+
+    /** Programme eines Kanals, die im Zeitfenster [from, to] liegen (fürs Tages-Grid). */
+    fun programmesInRange(channelId: String?, channelName: String?, from: Long, to: Long): List<XmltvProgramme> {
+        val progs = programmesFor(channelId)
+            .ifEmpty { programmesForName(channelName) }
+        return progs.filter { it.stop > from && it.start < to }
+    }
+
     /** Gemeinsame Jetzt/Danach-Logik (sortierte Liste, robust gegen EPG-Überlappungen). */
     private fun nowAndNextFrom(progs: List<XmltvProgramme>, now: Long): Pair<XmltvProgramme?, XmltvProgramme?> {
         if (progs.isEmpty()) return null to null

@@ -42,8 +42,85 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var recentIds by mutableStateOf<List<String>>(emptyList())
         private set
 
+    // ---------- VOD (Movies + Series) ----------
+    var vodCategories by mutableStateOf<List<Category>>(emptyList())
+        private set
+    var vodMovies by mutableStateOf<List<VodStream>>(emptyList())
+        private set
+    var seriesCategories by mutableStateOf<List<Category>>(emptyList())
+        private set
+    var seriesShows by mutableStateOf<List<SeriesStream>>(emptyList())
+        private set
+    var vodLoading by mutableStateOf(false)
+        private set
+    var vodError by mutableStateOf<String?>(null)
+        private set
+
+    /** Lädt VOD-Kategorien + Filme (einmalig, nach Login). */
+    fun loadVod() {
+        val c = creds ?: return
+        val a = api ?: return
+        if (vodLoading) return
+        vodLoading = true; vodError = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cats = withTimeout(30000) { a.vodCategories(c.user, c.pass) }
+                val movies = withTimeout(60000) { a.vodStreams(c.user, c.pass) }
+                val catNames = cats.associate { it.id to it.name }
+                movies.forEach { it.categoryName = catNames[it.categoryId] ?: "" }
+                withContextMain {
+                    vodCategories = cats
+                    vodMovies = movies
+                }
+            } catch (e: Exception) {
+                withContextMain { vodError = "VOD laden fehlgeschlagen: ${e.message}" }
+            } finally {
+                withContextMain { vodLoading = false }
+            }
+        }
+    }
+
+    /** Lädt Serien-Kategorien + Serien (einmalig, nach Login). */
+    fun loadSeries() {
+        val c = creds ?: return
+        val a = api ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cats = withTimeout(30000) { a.seriesCategories(c.user, c.pass) }
+                val shows = withTimeout(60000) { a.seriesStreams(c.user, c.pass) }
+                val catNames = cats.associate { it.id to it.name }
+                shows.forEach { it.categoryName = catNames[it.categoryId] ?: "" }
+                withContextMain {
+                    seriesCategories = cats
+                    seriesShows = shows
+                }
+            } catch (e: Exception) {
+                android.util.Log.d("SmartysIPTV", "Serien laden fehlgeschlagen: ${e.message}")
+            }
+        }
+    }
+
+    /** Serien-Episoden (Staffeln) einer Serie laden. */
+    suspend fun fetchSeriesInfo(seriesId: String): SeriesInfo? = runCatching {
+        val c = creds ?: return@runCatching null
+        val a = api ?: return@runCatching null
+        withTimeout(15000) { a.seriesInfo(c.user, c.pass, seriesId = seriesId) }
+    }.getOrNull()
+
     private var api: XtreamApi? = null
     private var channelsCache: List<LiveStream> = emptyList()
+
+    // ---------- Multi-Provider ----------
+    // alle gespeicherten Provider (Index-aligned mit `apis`); `creds` bleibt primary (erster).
+    var allProviders by mutableStateOf<List<CredStore.Creds>>(emptyList())
+        private set
+    private var apis: List<XtreamApi> = emptyList()
+
+    /** Stream-URL eines Kanals über SEINEN Provider (statt immer den ersten). */
+    fun streamUrlFor(channel: LiveStream): String? {
+        val c = allProviders.getOrNull(channel.providerIndex) ?: creds ?: return null
+        return c.streamUrl(channel.streamId)
+    }
 
     // ---------- EPG-Cache ----------
     // mutableStateMapOf => Compose recomponiert die Zeile automatisch, sobald das EPG ankommt.
@@ -168,8 +245,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     .create(XtreamApi::class.java)
 
                 api = fullApi
-                CredStore.save(getApplication(), clean, user, pass)
+                CredStore.saveAll(getApplication(), listOf(CredStore.Creds(clean, user, pass)))
                 creds = CredStore.Creds(clean, user, pass)
+                allProviders = listOf(creds!!)
+                apis = listOf(fullApi)
                 loadContent()
                 withContextMain { onResult(true, null) }
             } catch (e: Exception) {
@@ -182,46 +261,62 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun restoreSession() {
-        val c = CredStore.load(getApplication()) ?: run {
+        val providers = CredStore.loadAll(getApplication())
+        if (providers.isEmpty()) {
             state = AppState.NeedsLogin
             return
         }
-        creds = c
-        val client = okhttp3.OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
-        api = Retrofit.Builder()
-            .baseUrl("${c.url}/")
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(XtreamApi::class.java)
+        creds = providers.first()
+        allProviders = providers
+        apis = providers.map { buildApi(it) }
+        api = apis.firstOrNull()
         loadContent()
         favorites = getPrefs().getStringSet("favorites", emptySet()) ?: emptySet()
         lastWatched = getPrefs().getString("last_watched", null)
         loadRecent()
     }
 
+    private fun buildApi(c: CredStore.Creds): XtreamApi {
+        val client = okhttp3.OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+        return Retrofit.Builder()
+            .baseUrl("${c.url}/")
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(XtreamApi::class.java)
+    }
+
     private fun loadContent() {
         state = AppState.Loading
-        val c = creds ?: return
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val currentApi = api ?: return@launch
-                val cats = withTimeout(30000) { currentApi.liveCategories(c.user, c.pass) }
-                val streams = withTimeout(60000) { currentApi.liveStreams(c.user, c.pass) }
-
-                val catNames = cats.associate { it.id to it.name }
-                streams.forEach { it.categoryName = catNames[it.categoryId] ?: "" }
+                val providers = allProviders
+                if (providers.isEmpty()) return@launch
+                val all = mutableListOf<LiveStream>()
+                val allCats = mutableListOf<Category>()
+                providers.forEachIndexed { idx, c ->
+                    val a = apis.getOrNull(idx) ?: return@forEachIndexed
+                    val cats = withTimeout(30000) { a.liveCategories(c.user, c.pass) }
+                    val streams = withTimeout(60000) { a.liveStreams(c.user, c.pass) }
+                    val catNames = cats.associate { it.id to it.name }
+                    streams.forEach {
+                        it.categoryName = catNames[it.categoryId] ?: ""
+                        it.providerIndex = idx
+                    }
+                    all.addAll(streams)
+                    allCats.addAll(cats)
+                }
 
                 // Marker/Fake-Einträge rausfiltern (z.B. "##### DE ALLGEMEINES #####")
-                val clean = streams.filter { !it.name.contains("####") }
+                val clean = all.filter { !it.name.contains("####") }
                 channelsCache = clean
                 withContextMain {
-                    state = AppState.Ready(cats, clean)
+                    state = AppState.Ready(allCats, clean)
                 }
-                // XMLTV-EPG des Providers laden (groß, im Hintergrund; UI kommt sofort)
+                // XMLTV-EPG des (ersten) Providers laden
                 loadXmltvEpg()
             } catch (e: Exception) {
                 withContextMain {
@@ -254,6 +349,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         CredStore.clear(ctx)
         creds = null
         api = null
+        allProviders = emptyList()
+        apis = emptyList()
         state = AppState.NeedsLogin
     }
 
@@ -294,27 +391,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         pconn.setRequestProperty("Authorization", "Bearer $token")
         pconn.connectTimeout = 8000; pconn.readTimeout = 8000
         if (pconn.responseCode != 200) return@runCatching false
-        val providers = org.json.JSONArray(pconn.inputStream.bufferedReader().readText())
-        if (providers.length() == 0) return@runCatching false
-        val p = providers.getJSONObject(0)
-        val c = CredStore.Creds(
-            p.getString("server_url"),
-            p.getString("username"),
-            p.getString("password")
-        )
+        val respBody = org.json.JSONObject(pconn.inputStream.bufferedReader().readText())
+        // Backend liefert {name, providers:[{id,label,server_url,username,password,...}]}
+        val providersArr = respBody.optJSONArray("providers") ?: org.json.JSONArray()
+        if (providersArr.length() == 0) return@runCatching false
+        val providers = (0 until providersArr.length()).map { i ->
+            val p = providersArr.getJSONObject(i)
+            CredStore.Creds(
+                p.getString("server_url"),
+                p.getString("username"),
+                p.getString("password")
+            )
+        }
         // Speichern + als normale Session weitermachen:
-        creds = c
-        CredStore.save(getApplication(), c.url, c.user, c.pass)
-        val client = okhttp3.OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build()
-        api = Retrofit.Builder()
-            .baseUrl("${c.url}/")
-            .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(XtreamApi::class.java)
+        CredStore.saveAll(getApplication(), providers)
+        creds = providers.first()
+        allProviders = providers
+        apis = providers.map { buildApi(it) }
+        api = apis.firstOrNull()
         loadContent()
         true
     }.getOrDefault(false)
