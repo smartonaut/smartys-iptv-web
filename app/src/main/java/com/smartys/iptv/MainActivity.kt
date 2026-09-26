@@ -82,6 +82,23 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     // Haupt-Tab: live | movies | series
     var mainTab by remember { mutableStateOf("live") }
     var showEpg by remember { mutableStateOf(false) }
+    var showExitDialog by remember { mutableStateOf(false) }
+
+    // Globale Back-Navigation: Sub-Screens zuerst schließen, dann Tab zurueck,
+    // erst auf Live-TV-Ebene doppelt-Back => "App wirklich schließen?"-Dialog.
+    androidx.activity.compose.BackHandler(enabled = true) {
+        when {
+            showSettings -> showSettings = false
+            showEpg -> showEpg = false
+            vodPlaying.value != null -> { vodPlaying.value = null; player.value?.stop() }
+            playing.value != null -> { playing.value = null; player.value?.stop() }
+            openMovie.value != null -> openMovie.value = null
+            openSeries.value != null -> openSeries.value = null
+            mainTab != "live" -> mainTab = "live"
+            showExitDialog -> { showExitDialog = false }
+            else -> showExitDialog = true
+        }
+    }
 
     LaunchedEffect(Unit) {
         val ctx = appCtx
@@ -205,6 +222,25 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
                 }
             }
         }
+    }
+
+    // Exit-Bestaetigung: erst beim ZWEITEN Back auf Live-TV-Ebene gefragt
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("App schließen?", color = Color(0xFFE8EEFC), fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+            text = { Text("Möchtest du Smartys IPTV wirklich beenden?", color = Color(0xFF8FA3C8), fontSize = 15.sp) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showExitDialog = false
+                    (appCtx as? android.app.Activity)?.finish()
+                }) { Text("Beenden", color = Color(0xFFFFC94D), fontSize = 15.sp) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) { Text("Weiter schauen", color = Color(0xFF6B7A99), fontSize = 15.sp) }
+            },
+            containerColor = Color(0xFF10141F)
+        )
     }
 }
 
