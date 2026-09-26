@@ -10,10 +10,19 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 
 /**
- * Robuster Live-Stream-Player:
- * - Großer Puffer: kurze Netz-Aussetzer fallen nicht auf
- * - Auto-Reconnect bei Stream-Fehlern/Abbruch: DER Player hört nicht einfach auf zu spielen.
- *   Reconnect mit Backoff: 2s, 4s, 8s, 16s, 30s, 30s ... (unbegrenzt solange Kanal angewählt)
+ * Robuster Stream-Player für Live-TV UND VOD (Film/Serie).
+ *
+ * Live-TV: großer Puffer + Auto-Reconnect mit Backoff (2s, 4s, 8s, 16s, 30s …)
+ * — der Kanal soll bei kurzen Aussetzern einfach weiterlaufen.
+ *
+ * VOD: KEIN endloser Reconnect. Ein Stream-Fehler startet an der aktuellen
+ * Position neu (nicht bei 0), und ein regulär zu Ende gespielter Titel wird
+ * NICHT neu gestartet. Das verhindert, dass ein abgebrochener Film plötzlich
+ * von vorn beginnt.
+ *
+ * Puffer: bewusst moderat (max 40s). Ein 120s-Puffer auf einem 4K-Stream
+ * (~35 Mbit/s) frisst auf einem 2-GB-Gerät den gesamten CMA-/Heap-Speicher
+ * und lässt den Hardware-Decoder mit "Source error" aussteigen.
  */
 class RobustLivePlayer(ctx: Context) {
 
@@ -21,11 +30,11 @@ class RobustLivePlayer(ctx: Context) {
         .setTrackSelector(DefaultTrackSelector(ctx))
         .setLoadControl(
             DefaultLoadControl.Builder()
-                // Puffer: 30s Minimum bevor Playback startet, bis zu 120s vorhalten.
-                // Live-HLS mit 10s-Segmenten: 12 Segmente Stack = 2 Minuten Puffer vor Aussetzern.
+                // Puffer: 20s Minimum, max 40s vorhalten — reicht für Live-Aussetzer,
+                // ohne 4K-VOD den Speicher leerzufressen.
                 .setBufferDurationsMs(
-                    /* minBufferMs = */ 30_000,
-                    /* maxBufferMs = */ 120_000,
+                    /* minBufferMs = */ 20_000,
+                    /* maxBufferMs = */ 40_000,
                     /* bufferForPlaybackMs = */ 2_500,
                     /* bufferForPlaybackAfterRebufferMs = */ 5_000
                 )
@@ -41,6 +50,7 @@ class RobustLivePlayer(ctx: Context) {
     private var reconnectAttempts = 0
     private var scheduledReconnect = false
     private var pendingSeekMs: Long? = null
+    private var isVod = false
 
     init {
         player.addListener(object : Player.Listener {
@@ -51,19 +61,24 @@ class RobustLivePlayer(ctx: Context) {
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) {
-                    // Live-Stream sollte nie ENDED sein — Provider hat die Verbindung gekappt
-                    Log.w("SmartysIPTV", "Live-Stream endete unerwartet -> Reconnect")
-                    scheduleReconnect()
+                    if (isVod) {
+                        // Film/Episode regulär zu Ende — KEIN Reconnect, sonst startet er von vorn.
+                        Log.i("SmartysIPTV", "VOD zu Ende gespielt")
+                    } else {
+                        // Live-Stream sollte nie ENDED sein — Provider hat die Verbindung gekappt
+                        Log.w("SmartysIPTV", "Live-Stream endete unerwartet -> Reconnect")
+                        scheduleReconnect()
+                    }
                 }
                 if (state == Player.STATE_READY) {
                     reconnectAttempts = 0
                     scheduledReconnect = false
-                    // Fortsetzen: gewünschte Start-Position erst nach READY anspringen.
+                    // Gewünschte Position (Fortsetzen oder Reconnect) erst nach READY anspringen.
                     pendingSeekMs?.let { ms ->
                         pendingSeekMs = null
                         if (ms > 0L) {
                             player.seekTo(ms)
-                            Log.d("SmartysIPTV", "Fortsetzen: seekTo ${ms}ms")
+                            Log.d("SmartysIPTV", "seekTo ${ms}ms")
                         }
                     }
                 }
@@ -71,11 +86,12 @@ class RobustLivePlayer(ctx: Context) {
         })
     }
 
-    /** Kanal abspielen. Idempotent — gleicher Kanal wird nicht doppelt angestoßen. */
+    /** Titel abspielen. channelId mit "vod:"-Präfix markiert VOD (Film/Serie). */
     fun playChannel(url: String, channelId: String, onDead: ((String) -> Unit)? = null, startPosMs: Long = 0L) {
         currentUrl = url
         currentChannelId = channelId
         onChannelDead = onDead
+        isVod = channelId.startsWith("vod:")
         reconnectAttempts = 0
         scheduledReconnect = false
         pendingSeekMs = if (startPosMs > 0L) startPosMs else null
@@ -97,6 +113,16 @@ class RobustLivePlayer(ctx: Context) {
         if (scheduledReconnect) return
         if (currentUrl == null) return
         scheduledReconnect = true
+
+        // VOD: aktuelle Position merken, damit der Reconnect dort weitermacht statt bei 0.
+        if (isVod) {
+            val pos = player.currentPosition
+            if (pos > 0L) {
+                pendingSeekMs = pos
+                Log.i("SmartysIPTV", "VOD-Reconnect: merke Position ${pos}ms")
+            }
+        }
+
         val delayMs = when {
             reconnectAttempts == 0 -> 2_000L
             reconnectAttempts == 1 -> 4_000L
@@ -108,7 +134,7 @@ class RobustLivePlayer(ctx: Context) {
         Log.w("SmartysIPTV", "Reconnect in ${delayMs / 1000}s (Versuch $reconnectAttempts)")
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             scheduledReconnect = false
-            // Nur wenn der Kanal noch aktuell ist (User könnte inzwischen umgeschaltet haben)
+            // Nur wenn der Titel noch aktuell ist (User könnte inzwischen umgeschaltet haben)
             if (currentUrl != null) {
                 startStream()
             }
