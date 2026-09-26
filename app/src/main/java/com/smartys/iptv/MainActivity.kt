@@ -84,13 +84,26 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     var showEpg by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
 
+    // Position des laufenden VOD-Titels sichern und Playback beenden (Fortsetzen-Feature).
+    // Zentral für beide Wege: physische Back-Taste UND "←"-Button im Player.
+    fun stopVod() {
+        val vod = vodPlaying.value
+        val exo = player.value?.player
+        if (vod != null && exo != null) {
+            val pos = exo.currentPosition
+            if (pos > 0L) ResumeStore.save(appCtx, vod.key, pos, exo.duration)
+        }
+        vodPlaying.value = null
+        player.value?.stop()
+    }
+
     // Globale Back-Navigation: Sub-Screens zuerst schließen, dann Tab zurueck,
     // erst auf Live-TV-Ebene doppelt-Back => "App wirklich schließen?"-Dialog.
     androidx.activity.compose.BackHandler(enabled = true) {
         when {
             showSettings -> showSettings = false
             showEpg -> showEpg = false
-            vodPlaying.value != null -> { vodPlaying.value = null; player.value?.stop() }
+            vodPlaying.value != null -> { stopVod() }
             playing.value != null -> { playing.value = null; player.value?.stop() }
             openMovie.value != null -> openMovie.value = null
             openSeries.value != null -> openSeries.value = null
@@ -133,7 +146,9 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
 
     val playVod: (VodPlayback) -> Unit = { vod ->
         vodPlaying.value = vod
-        player.value?.playChannel(vod.url, "vod:${vod.title}")
+        // Fortsetzen: gespeicherte Position beim Start wiederherstellen.
+        val resume = if (vod.startPosMs > 0L) vod.startPosMs else ResumeStore.position(appCtx, vod.key)
+        player.value?.playChannel(vod.url, "vod:${vod.title}", startPosMs = resume)
     }
 
     if (!pinUnlocked) {
@@ -171,7 +186,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
                 )
                 vodCur != null -> VodPlayerScreen(
                     vod = vodCur, player = player.value?.player,
-                    onBack = { vodPlaying.value = null; player.value?.stop() }
+                    onBack = { stopVod() }
                 )
                 movieCur != null -> MovieDetail(
                     vm = vm, movie = movieCur,

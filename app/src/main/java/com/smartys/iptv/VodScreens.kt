@@ -36,7 +36,7 @@ import coil.compose.AsyncImage
 
 // ---------- VOD / Serien-Typen für die Wiedergabe ----------
 
-data class VodPlayback(val url: String, val title: String)
+data class VodPlayback(val url: String, val title: String, val key: String, val startPosMs: Long = 0L)
 
 // ---------- Filme-Grid ----------
 
@@ -420,7 +420,7 @@ fun SeriesDetail(
                         val c = vm.creds
                         var epFocused by remember { mutableStateOf(false) }
                         Surface(
-                            onClick = { c?.let { onPlay(VodPlayback(c.seriesUrl(ep.id, ep.containerExtension ?: "mp4"), ep.title ?: "${show.name} S${activeSeason}E${ep.episodeNum}")) } },
+                            onClick = { c?.let { onPlay(VodPlayback(c.seriesUrl(ep.id, ep.containerExtension ?: "mp4"), ep.title ?: "${show.name} S${activeSeason}E${ep.episodeNum}", key = "series:${ep.id}")) } },
                             shape = RoundedCornerShape(10.dp),
                             color = if (epFocused) Color(0xFF1A2238) else Color(0xFF10141F),
                             border = if (epFocused) androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D)) else null,
@@ -520,22 +520,32 @@ fun MovieDetail(
             }
             Spacer(Modifier.height(18.dp))
 
-            // Action-Buttons: Abspielen + Trailer
+            // Action-Buttons: Abspielen (bzw. Fortsetzen) + Trailer
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                val resumePos = remember(movie.streamId) { ResumeStore.position(ctx, "movie:${movie.streamId}") }
+                val canResume = resumePos > 30_000L  // unter 30s lohnt Fortsetzen nicht
                 Surface(
                     onClick = {
                         val c = vm.creds ?: return@Surface
-                        onPlay(VodPlayback(c.movieUrl(movie.streamId, movie.containerExtension ?: "mp4"), movie.name))
+                        onPlay(VodPlayback(c.movieUrl(movie.streamId, movie.containerExtension ?: "mp4"), movie.name, key = "movie:${movie.streamId}", startPosMs = if (canResume) resumePos else 0L))
                     },
                     shape = RoundedCornerShape(12.dp),
                     color = Color(0xFFFFC94D),
                     modifier = Modifier.focusRequester(playFocus)
                 ) {
-                    Text(
-                        "▶ Abspielen",
-                        color = Color(0xFF0B0E14), fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 13.dp)
-                    )
+                    Column(Modifier.padding(horizontal = 28.dp, vertical = 13.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            if (canResume) "▶ Fortsetzen" else "▶ Abspielen",
+                            color = Color(0xFF0B0E14), fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                        )
+                        if (canResume) {
+                            val mins = resumePos / 60000
+                            Text(
+                                "bei ${mins} Min",
+                                color = Color(0xFF5C3A00), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
                 }
                 if (movie.hasTrailer()) {
                     Surface(
