@@ -48,6 +48,7 @@ fun MovieGrid(
     selectedCategory: String?,
     onSelectCategory: (String?) -> Unit,
     onOpen: (VodStream) -> Unit,
+    focusRestoreId: String? = null,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -56,12 +57,25 @@ fun MovieGrid(
     var searchFocused by remember { mutableStateOf(false) }
     val searchFieldFocus = remember { FocusRequester() }
     val gridState = rememberLazyGridState()
+    val restoreFocus = remember { androidx.compose.ui.focus.FocusRequester() }
 
     val shown = remember(movies, selectedCategory, searchQuery) {
         var list = movies
         if (selectedCategory != null) list = list.filter { it.categoryId == selectedCategory }
         if (searchQuery.isNotBlank()) list = list.filter { it.name.contains(searchQuery, true) }
         list
+    }
+
+    // Ruecksprung aus der Detailseite: zum zuletzt geoeffneten Film scrollen + fokussieren
+    val restoreIdx = shown.indexOfFirst { it.streamId == focusRestoreId }
+    LaunchedEffect(focusRestoreId, shown.size) {
+        if (restoreIdx >= 0) {
+            kotlinx.coroutines.delay(150)
+            runCatching {
+                gridState.scrollToItem(restoreIdx.coerceAtLeast(0))
+                restoreFocus.requestFocus()
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -146,7 +160,12 @@ fun MovieGrid(
                     modifier = Modifier.weight(1f)
                 ) {
                     items(shown, key = { it.streamId }) { movie ->
-                        MovieCard(movie = movie, onClick = { onOpen(movie) })
+                        val isRestore = movie.streamId == focusRestoreId
+                        MovieCard(
+                            movie = movie,
+                            onClick = { onOpen(movie) },
+                            focusRequester = if (isRestore) restoreFocus else null
+                        )
                     }
                 }
             }
@@ -155,11 +174,12 @@ fun MovieGrid(
 }
 
 @Composable
-fun MovieCard(movie: VodStream, onClick: () -> Unit) {
+fun MovieCard(movie: VodStream, onClick: () -> Unit, focusRequester: FocusRequester? = null) {
     var focused by remember { mutableStateOf(false) }
     val scale = if (focused) 1.06f else 1f
     Column(
         Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .graphicsLayer(scaleX = scale, scaleY = scale)
             .clip(RoundedCornerShape(12.dp))
             .background(if (focused) Color(0xFF26324E) else Color(0xFF10141F))
@@ -217,6 +237,7 @@ fun SeriesGrid(
     selectedCategory: String?,
     onSelectCategory: (String?) -> Unit,
     onOpen: (SeriesStream) -> Unit,
+    focusRestoreId: String? = null,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -227,6 +248,20 @@ fun SeriesGrid(
         if (selectedCategory != null) list = list.filter { it.categoryId == selectedCategory }
         if (searchQuery.isNotBlank()) list = list.filter { it.name.contains(searchQuery, true) }
         list
+    }
+
+    // Ruecksprung aus der Serien-Detailseite: Fokus auf zuletzt geoeffnete Serie
+    val seriesGridState = rememberLazyGridState()
+    val seriesRestoreFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val restoreIdx = shown.indexOfFirst { it.seriesId == focusRestoreId }
+    LaunchedEffect(focusRestoreId, shown.size) {
+        if (restoreIdx >= 0) {
+            kotlinx.coroutines.delay(150)
+            runCatching {
+                seriesGridState.scrollToItem(restoreIdx.coerceAtLeast(0))
+                seriesRestoreFocus.requestFocus()
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -273,6 +308,7 @@ fun SeriesGrid(
             }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 160.dp),
+                state = seriesGridState,
                 contentPadding = PaddingValues(24.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -283,6 +319,7 @@ fun SeriesGrid(
                     val scale = if (focused) 1.06f else 1f
                     Column(
                         Modifier
+                            .then(if (show.seriesId == focusRestoreId) Modifier.focusRequester(seriesRestoreFocus) else Modifier)
                             .graphicsLayer(scaleX = scale, scaleY = scale)
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (focused) Color(0xFF26324E) else Color(0xFF10141F))

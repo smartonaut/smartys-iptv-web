@@ -70,6 +70,10 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     // innerhalb der Grids ueberlebt das nicht. Von hier aus ueberlebt er alles.
     val movieCat = remember { mutableStateOf<String?>(null) }
     val seriesCat = remember { mutableStateOf<String?>(null) }
+    // Zuletzt geöffneter Film/Serie: beim Ruecksprung aus der Detailseite den
+    // Grid-Fokus dorthin restaurieren (statt oben links).
+    val lastMovieId = remember { mutableStateOf<String?>(null) }
+    val lastSeriesId = remember { mutableStateOf<String?>(null) }
     // Parental Control: PIN-Gate beim Start
     var pinUnlocked by remember { mutableStateOf(!ParentalControl.isEnabled(appCtx)) }
     var searchQuery by remember { mutableStateOf("") }
@@ -170,7 +174,8 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
                                 vm = vm, categories = vm.vodCategories, movies = vm.vodMovies,
                                 selectedCategory = movieCat.value,
                                 onSelectCategory = { movieCat.value = it },
-                                onOpen = { openMovie.value = it },
+                                onOpen = { lastMovieId.value = it.streamId; openMovie.value = it },
+                                focusRestoreId = if (openMovie.value == null) lastMovieId.value else null,
                                 onBack = { mainTab = "live" },
                                 onOpenSettings = { showSettings = true }
                             )
@@ -178,7 +183,8 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
                                 vm = vm, categories = vm.seriesCategories, shows = vm.seriesShows,
                                 selectedCategory = seriesCat.value,
                                 onSelectCategory = { seriesCat.value = it },
-                                onOpen = { openSeries.value = it },
+                                onOpen = { lastSeriesId.value = it.seriesId; openSeries.value = it },
+                                focusRestoreId = if (openSeries.value == null) lastSeriesId.value else null,
                                 onBack = { mainTab = "live" },
                                 onOpenSettings = { showSettings = true }
                             )
