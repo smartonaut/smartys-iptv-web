@@ -730,12 +730,12 @@ fun ChannelGrid(
                 .background(Color(0xFF11172A)).padding(vertical = 14.dp)
         ) {
             item {
-                CategoryItem("Alle Kanäle", selectedCategory == null && !favMode) { categoryClicked(null, false) }
-                CategoryItem("Favoriten (${vm.favorites.size})", favMode) { categoryClicked(null, true) }
+                CategoryItem("Alle Kanäle", selectedCategory == null && !favMode, onClick = { categoryClicked(null, false) })
+                CategoryItem("Favoriten (${vm.favorites.size})", favMode, onClick = { categoryClicked(null, true) })
                 Spacer(Modifier.height(8.dp))
             }
             items(categories) { cat ->
-                CategoryItem(cat.name, selectedCategory == cat.id) { categoryClicked(cat.id, false) }
+                CategoryItem(cat.name, selectedCategory == cat.id, onClick = { categoryClicked(cat.id, false) })
             }
         }
 
@@ -846,7 +846,7 @@ fun ChannelGrid(
 }
 
 @Composable
-fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit) {
+fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit, focusRequester: FocusRequester? = null) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         // Aktiv: DEUTLICH dunkler als die Sidebar (fast schwarz) => klar erkennbar
@@ -859,6 +859,7 @@ fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit) {
         // Fokus-Cursor: goldener Rahmen wie bei den Kanalzeilen
         border = if (focused) androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D)) else null,
         modifier = Modifier.fillMaxWidth()
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
     ) {

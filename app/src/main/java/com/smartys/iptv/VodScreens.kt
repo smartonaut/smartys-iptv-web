@@ -68,6 +68,7 @@ fun MovieGrid(
 
     // Ruecksprung aus der Detailseite: zum zuletzt geoeffneten Film scrollen + fokussieren
     val restoreIdx = shown.indexOfFirst { it.streamId == focusRestoreId }
+    val firstCatFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     LaunchedEffect(focusRestoreId, shown.size) {
         if (restoreIdx >= 0) {
             kotlinx.coroutines.delay(150)
@@ -75,6 +76,10 @@ fun MovieGrid(
                 gridState.scrollToItem(restoreIdx.coerceAtLeast(0))
                 restoreFocus.requestFocus()
             }
+        } else {
+            // Erster Einstieg: Fokus aufs Kategoriemenue statt aufs Suchfeld.
+            kotlinx.coroutines.delay(150)
+            runCatching { firstCatFocus.requestFocus() }
         }
     }
 
@@ -132,7 +137,7 @@ fun MovieGrid(
                     CategoryPrefs.applyTo("movies", categories)
                 }
                 LazyColumn(Modifier.width(300.dp).fillMaxHeight().background(Color(0xFF11172A)).padding(vertical = 14.dp)) {
-                    item { CategoryItem("Alle Filme", selectedCategory == null) { onSelectCategory(null) } }
+                    item { CategoryItem("Alle Filme", selectedCategory == null, onClick = { onSelectCategory(null) }, focusRequester = firstCatFocus) }
                     items(orderedCats) { cat ->
                         VodCategoryItem(
                             cat = cat,
@@ -257,6 +262,7 @@ fun SeriesGrid(
     // Ruecksprung aus der Serien-Detailseite: Fokus auf zuletzt geoeffnete Serie
     val seriesGridState = rememberLazyGridState()
     val seriesRestoreFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val firstCatFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val restoreIdx = shown.indexOfFirst { it.seriesId == focusRestoreId }
     LaunchedEffect(focusRestoreId, shown.size) {
         if (restoreIdx >= 0) {
@@ -265,6 +271,11 @@ fun SeriesGrid(
                 seriesGridState.scrollToItem(restoreIdx.coerceAtLeast(0))
                 seriesRestoreFocus.requestFocus()
             }
+        } else {
+            // Beim ersten Einstieg (kein Ruecksprung): Fokus aufs Kategoriemenue
+            // statt aufs Suchfeld — D-Pad runter soll zuerst die Kategorie treffen.
+            kotlinx.coroutines.delay(150)
+            runCatching { firstCatFocus.requestFocus() }
         }
     }
 
@@ -292,7 +303,7 @@ fun SeriesGrid(
                 CategoryPrefs.applyTo("series", categories)
             }
             LazyColumn(Modifier.width(300.dp).fillMaxHeight().background(Color(0xFF11172A)).padding(vertical = 14.dp)) {
-                item { CategoryItem("Alle Serien", selectedCategory == null) { onSelectCategory(null) } }
+                item { CategoryItem("Alle Serien", selectedCategory == null, onClick = { onSelectCategory(null) }, focusRequester = firstCatFocus) }
                 items(orderedCats) { cat ->
                     VodCategoryItem(
                         cat = cat,
