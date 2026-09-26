@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Smartys IPTV — Cinema Tiles</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    background: #07090f;
+    color: #fff;
+    width: 1920px; height: 1080px;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    height: 90px; display: flex; align-items: center;
+    padding: 0 48px; gap: 32px;
+    background: linear-gradient(180deg, rgba(7,9,15,.95) 0%, rgba(7,9,15,0) 100%);
+    position: relative; z-index: 5;
+  }
+  .logo { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo span { color: #3ea6ff; }
+  .search {
+    margin-left: auto; width: 420px; height: 52px;
+    background: #141a2a; border: 2px solid #232c42; border-radius: 26px;
+    display: flex; align-items: center; padding: 0 24px; color: #6b7a99; font-size: 20px;
+  }
+  .content { display: flex; height: calc(100% - 90px); }
+
+  /* Kategorie-Rail oben statt Sidebar */
+  .main { flex: 1; padding: 24px 48px; overflow: hidden; }
+  .rails { display: flex; flex-direction: column; height: 100%; }
+  .rail-label { font-size: 22px; font-weight: 700; color: #aab8d4; margin: 18px 0 14px; text-transform: uppercase; letter-spacing: 2px; }
+  .rail { display: flex; gap: 20px; overflow-x: auto; padding-bottom: 8px; }
+  .tile {
+    width: 300px; height: 168px; border-radius: 14px; flex-shrink: 0;
+    background: #10141f; border: 3px solid #1a2133;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; cursor: pointer; transition: all .15s;
+  }
+  .tile .ch { width: 130px; height: 72px; background: #1b2334; border-radius: 8px; display:flex; align-items:center; justify-content:center; color:#8fa3c8; font-weight:700; font-size:18px; }
+  .tile .name { font-size: 18px; font-weight: 600; }
+  .tile .epg { font-size: 14px; color: #6b7a99; }
+  .tile.focused {
+    border-color: #3ea6ff; transform: scale(1.06);
+    box-shadow: 0 12px 40px rgba(62,166,255,.35);
+    background: #131a2c;
+  }
+  .tile.focused .epg { color: #3ea6ff; }
+
+  .side {
+    width: 340px; background: rgba(10,13,22,.92);
+    border-left: 1px solid #1a2133; padding: 28px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .side h3 { font-size: 20px; color: #6b7a99; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; }
+  .cat {
+    padding: 14px 18px; border-radius: 10px; font-size: 20px; cursor: pointer;
+    color: #aab8d4; display: flex; justify-content: space-between; align-items: center;
+  }
+  .cat .n { font-size: 15px; color: #4d5b78; }
+  .cat:hover { background: #141b2e; }
+  .cat.active { background: rgba(62,166,255,.14); color: #3ea6ff; font-weight: 700; }
+  .cat.active .n { color: #3ea6ff; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo">Smartys <span>IPTV</span></div>
+    <div class="search">🔍 Kanal oder Sendung suchen…</div>
+  </div>
+  <div class="content">
+    <div class="main">
+      <div class="rails">
+        <div class="rail-label">Zuletzt geschaut</div>
+        <div class="rail">
+          <div class="tile"><div class="ch">DAS ERSTE</div><div class="name">DE – DAS ERSTE HD</div><div class="epg">09:20 · Die Pfefferkörner</div></div>
+          <div class="tile focused"><div class="ch">SUPER RTL</div><div class="name">DE – SUPER RTL 4K</div><div class="epg">09:00 · SpongeBob</div></div>
+          <div class="tile"><div class="ch">ZDF</div><div class="name">DE – ZDF HD</div><div class="epg">09:05 · heute+</div></div>
+          <div class="tile"><div class="ch">RTL</div><div class="name">DE – RTL HD</div><div class="epg">09:15 · Punkt 12</div></div>
+          <div class="tile"><div class="ch">PRO7</div><div class="name">DE – PROSIEBEN HD</div><div class="epg">10:10 · Galileo</div></div>
+        </div>
+        <div class="rail-label">|DE| 4K+ Paket — Beliebt</div>
+        <div class="rail">
+          <div class="tile"><div class="ch">NAT GEO</div><div class="name">NATIONAL GEOGRAPHIC 4K</div><div class="epg">08:55 · Wildes Deutschland</div></div>
+          <div class="tile"><div class="ch">SYFY</div><div class="name">DE – SYFY 4K</div><div class="epg">09:00 · Stargate</div></div>
+          <div class="tile"><div class="ch">TELE 5</div><div class="name">DE – TELE 5 4K</div><div class="epg">09:30 · Klassiker</div></div>
+          <div class="tile"><div class="ch">SPIEGEL</div><div class="name">SPIEGEL GESCHICHTE 4K</div><div class="epg">09:45 · Doku</div></div>
+          <div class="tile"><div class="ch">RTL II</div><div class="name">DE – RTL II 4K</div><div class="epg">10:00 · News</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <h3>Kategorien</h3>
+      <div class="cat">Alle Kanäle <span class="n">1503</span></div>
+      <div class="cat">Favoriten <span class="n">12</span></div>
+      <div class="cat">|DE| Allgemein <span class="n">86</span></div>
+      <div class="cat active">|DE| 4K+ Paket <span class="n">80</span></div>
+      <div class="cat">|DE| Sky Film &amp; Serie <span class="n">94</span></div>
+      <div class="cat">|DE| Kinder <span class="n">42</span></div>
+      <div class="cat">|DE| Unterhaltung <span class="n">67</span></div>
+      <div class="cat">|PL| Poland FHD <span class="n">88</span></div>
+    </div>
+  </div>
+</body>
+</html>

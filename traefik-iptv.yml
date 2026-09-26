@@ -1,0 +1,28 @@
+http:
+  routers:
+    iptv:
+      rule: "Host(`player.smartys.tech`)"
+      entryPoints:
+        - "websecure"
+      service: iptv
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - sec-headers
+
+  services:
+    iptv:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8100"
+
+  middlewares:
+    sec-headers:
+      headers:
+        frameDeny: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        referrerPolicy: same-origin
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        forceSTSHeader: true

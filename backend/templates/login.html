@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smartys IPTV — Anmeldung</title>
+<style>
+  :root { --bg:#0b0e14; --panel:#11172a; --border:#232c42; --text:#e8eefc; --muted:#6b7a99; --gold:#ffc94d; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:40px; width:100%; max-width:420px; }
+  .logo { font-size:28px; font-weight:800; margin-bottom:6px; }
+  .logo span { color:var(--gold); }
+  .sub { color:var(--muted); font-size:14px; margin-bottom:28px; }
+  label { display:block; color:var(--muted); font-size:13px; margin:16px 0 6px; }
+  input { width:100%; background:#0b0e14; border:1px solid var(--border); border-radius:10px; color:var(--text); padding:12px 14px; font-size:15px; }
+  input:focus { outline:none; border-color:var(--gold); }
+  button { width:100%; margin-top:24px; background:var(--gold); color:#0b0e14; border:none; border-radius:10px; padding:13px; font-size:16px; font-weight:700; cursor:pointer; }
+  button:hover { filter:brightness(1.1); }
+  .err { color:#ff7d7d; background:rgba(255,125,125,.08); border:1px solid rgba(255,125,125,.3); border-radius:10px; padding:10px 14px; margin-top:16px; font-size:14px; }
+  .hint { margin-top:22px; color:var(--muted); font-size:12px; line-height:1.6; }
+  .hint b { color:var(--text); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Smartys <span>IPTV</span></div>
+    <div class="sub">Player-Verwaltung</div>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <label for="mac">MAC-Adresse des Players</label>
+      <input id="mac" name="mac" placeholder="AA:BB:CC:11:22:33" required autofocus>
+      <label for="password">Pairing-Passwort</label>
+      <input id="password" name="password" type="password" placeholder="Vom Player angezeigt" required>
+      <button type="submit">Anmelden</button>
+    </form>
+    <div class="hint">
+      MAC-Adresse und Passwort werden auf deinem TV in der App angezeigt:<br>
+      <b>Einstellungen → Mein Player</b>
+    </div>
+  </div>
+</body>
+</html>

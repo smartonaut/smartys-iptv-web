@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Smartys IPTV — Glass Tabs</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    background: radial-gradient(1200px 700px at 75% -10%, #17233f 0%, #0a0d16 55%, #06080e 100%);
+    color: #fff; width: 1920px; height: 1080px; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar { height: 96px; display: flex; align-items: center; padding: 0 56px; gap: 36px; }
+  .logo { font-size: 34px; font-weight: 800; }
+  .logo b { background: linear-gradient(90deg,#6ee7ff,#3ea6ff); -webkit-background-clip: text; color: transparent; }
+  .pillrow { display: flex; gap: 14px; margin-left: 30px; }
+  .pill {
+    padding: 12px 28px; border-radius: 999px; font-size: 20px; font-weight: 600;
+    background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.10);
+    color: #93a3c4; cursor: pointer; backdrop-filter: blur(8px);
+  }
+  .pill.active { background: rgba(62,166,255,.18); border-color: #3ea6ff; color: #fff; box-shadow: 0 0 24px rgba(62,166,255,.35); }
+  .search {
+    margin-left: auto; width: 400px; height: 54px; border-radius: 999px;
+    background: rgba(255,255,255,.06); border: 2px solid rgba(255,255,255,.10);
+    display: flex; align-items: center; padding: 0 24px; color: #6b7a99; font-size: 20px;
+    backdrop-filter: blur(8px);
+  }
+  .hero {
+    margin: 10px 56px 24px; padding: 36px 44px; border-radius: 22px;
+    background: linear-gradient(120deg, rgba(62,166,255,.16), rgba(110,231,255,.05) 60%, rgba(255,255,255,.02));
+    border: 2px solid rgba(255,255,255,.08);
+    display: flex; align-items: center; gap: 36px; backdrop-filter: blur(10px);
+  }
+  .hero .logo2 { width: 180px; height: 100px; background: #0d1424; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px; color: #6ee7ff; }
+  .hero .info h1 { font-size: 40px; font-weight: 800; }
+  .hero .info .epg { font-size: 20px; color: #93a3c4; margin-top: 8px; }
+  .hero .info .meta { font-size: 16px; color: #5a6b8c; margin-top: 6px; }
+  .hero .btns { margin-left: auto; display: flex; gap: 16px; }
+  .btn {
+    padding: 16px 36px; border-radius: 999px; font-size: 20px; font-weight: 700; cursor: pointer;
+  }
+  .btn.primary { background: linear-gradient(90deg,#3ea6ff,#6ee7ff); color: #04101f; box-shadow: 0 8px 30px rgba(62,166,255,.4); }
+  .btn.ghost { background: rgba(255,255,255,.08); color: #fff; border: 2px solid rgba(255,255,255,.15); }
+
+  .gridwrap { padding: 0 56px; }
+  .gridlabel { font-size: 20px; font-weight: 700; color: #93a3c4; margin: 6px 0 16px; text-transform: uppercase; letter-spacing: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 18px; }
+  .card {
+    border-radius: 16px; padding: 18px 16px 16px; cursor: pointer;
+    background: rgba(255,255,255,.045); border: 2px solid rgba(255,255,255,.08);
+    text-align: center; backdrop-filter: blur(6px);
+  }
+  .card .ch { width: 100%; height: 64px; background: rgba(13,20,36,.8); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; color: #7f93b8; font-size: 16px; margin-bottom: 12px; }
+  .card .name { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .epg { font-size: 14px; color: #5a6b8c; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card.focused {
+    border-color: #6ee7ff; background: rgba(62,166,255,.14);
+    box-shadow: 0 10px 36px rgba(62,166,255,.4); transform: translateY(-4px);
+  }
+  .card.focused .epg { color: #6ee7ff; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo">Smartys <b>IPTV</b></div>
+    <div class="pillrow">
+      <div class="pill active">Live-TV</div>
+      <div class="pill">Filme</div>
+      <div class="pill">Serien</div>
+      <div class="pill">Favoriten</div>
+    </div>
+    <div class="search">🔍 Suchen…</div>
+  </div>
+  <div class="hero">
+    <div class="logo2">DAS ERSTE</div>
+    <div class="info">
+      <h1>DE – DAS ERSTE HD</h1>
+      <div class="epg">Jetzt: 09:20 · Die Pfefferkörner &nbsp;→&nbsp; Danach: 09:50 · Tagesschau</div>
+      <div class="meta">Zuletzt geschaut · Kanal 1</div>
+    </div>
+    <div class="btns">
+      <div class="btn ghost">★ Favorit</div>
+      <div class="btn primary">▶  Weitersehen</div>
+    </div>
+  </div>
+  <div class="gridwrap">
+    <div class="gridlabel">|DE| Allgemein · Häufig geschaut</div>
+    <div class="grid">
+      <div class="card"><div class="ch">ZDF</div><div class="name">DE – ZDF HD</div><div class="epg">09:05 · heute+</div></div>
+      <div class="card"><div class="ch">RTL</div><div class="name">DE – RTL HD</div><div class="epg">09:15 · Punkt 12</div></div>
+      <div class="card focused"><div class="ch">SAT.1</div><div class="name">DE – SAT.1 HD</div><div class="epg">09:30 · Richter Hold</div></div>
+      <div class="card"><div class="ch">PRO7</div><div class="name">DE – PROSIEBEN HD</div><div class="epg">10:10 · Galileo</div></div>
+      <div class="card"><div class="ch">VOX</div><div class="name">DE – VOX HD</div><div class="epg">09:40 · auto mobil</div></div>
+      <div class="card"><div class="ch">RTL II</div><div class="name">DE – RTL II HD</div><div class="epg">10:00 · Nachrichten</div></div>
+    </div>
+  </div>
+</body>
+</html>
