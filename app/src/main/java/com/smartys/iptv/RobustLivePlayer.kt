@@ -27,17 +27,58 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
  */
 class RobustLivePlayer(ctx: Context) {
 
+    /** Puffergrößen (in ms) dynamisch an die Hardware anpassen.
+     *  Schwache Geräte (wenig RAM / wenig CMA) bekommen kleine Puffer, damit der
+     *  Hardware-Decoder bei 4K nicht wegen Speichermangel ("Source error") abstürzt;
+     *  kräftige Geräte bekommen größere Puffer für stabileres Live-TV.
+     */
+    private fun detectBufferDurations(): IntArray {
+        // Echten Gesamt-RAM über /proc/meminfo lesen (memoryClass deckt nur die Heap-Grenze ab).
+        val totalRamMb = try {
+            val line = java.io.File("/proc/meminfo").readLines()
+                .firstOrNull { it.startsWith("MemTotal") } ?: ""
+            line.replace(Regex("[^0-9]"), "").toLongOrNull()?.let { it / 1024 } ?: 0L
+        } catch (e: Exception) { 0L }
+
+        // CMA (Contiguous Memory Allocator) ist der eigentliche 4K-Engpass: fällt er auf 0,
+        // bricht der Decoder ab. Ist CMA klein/belegt, Puffer klein halten.
+        val cmaTotalMb = try {
+            val line = java.io.File("/proc/meminfo").readLines()
+                .firstOrNull { it.startsWith("CmaTotal") } ?: ""
+            line.replace(Regex("[^0-9]"), "").toLongOrNull()?.let { it / 1024 } ?: 0L
+        } catch (e: Exception) { 0L }
+
+        return when {
+            // Starke Geräte: viel RAM (>4 GB) ODER viel CMA (>512 MB) → großer Puffer
+            totalRamMb >= 4096 -> intArrayOf(30_000, 60_000, 5_000, 10_000)
+            // Mittelklasse: 2–4 GB RAM, ausreichend CMA → moderater Puffer
+            totalRamMb >= 2048 -> intArrayOf(20_000, 40_000, 2_500, 5_000)
+            // Schwache Geräte: <2 GB RAM → kleiner Puffer, Decoder-Sicherheit geht vor
+            else -> intArrayOf(10_000, 20_000, 2_000, 4_000)
+        }.also {
+            // Zusätzliche Absicherung: Ist CMA verdächtig klein (unter 256 MB, z. B. Fire TV Sticks),
+            // den Max-Puffer deckeln — 4K braucht CMA, kein Heap.
+            if (cmaTotalMb in 1..255) {
+                val capped = intArrayOf(it[0].coerceAtMost(15_000), it[1].coerceAtMost(25_000), it[2], it[3])
+                Log.i("SmartysIPTV", "Puffer wegen kleinem CMA ($cmaTotalMb MB) gedrosselt: ${capped.joinToString("/")}")
+                return capped
+            }
+            Log.i("SmartysIPTV", "Puffer je RAM=$totalRamMb MB / CMA=$cmaTotalMb MB: ${it.joinToString("/")}")
+        }
+    }
+
+    /** Einmalig berechnete Puffergrößen [min, max, playback, afterRebuffer] in ms. */
+    private val bufferDurations: IntArray = detectBufferDurations()
+
     val player: ExoPlayer = ExoPlayer.Builder(ctx)
         .setTrackSelector(DefaultTrackSelector(ctx))
         .setLoadControl(
             DefaultLoadControl.Builder()
-                // Puffer: 20s Minimum, max 40s vorhalten — reicht für Live-Aussetzer,
-                // ohne 4K-VOD den Speicher leerzufressen.
                 .setBufferDurationsMs(
-                    /* minBufferMs = */ 20_000,
-                    /* maxBufferMs = */ 40_000,
-                    /* bufferForPlaybackMs = */ 2_500,
-                    /* bufferForPlaybackAfterRebufferMs = */ 5_000
+                    bufferDurations[0],
+                    bufferDurations[1],
+                    bufferDurations[2],
+                    bufferDurations[3]
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build()
