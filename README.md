@@ -32,7 +32,7 @@ Eigenes IPTV-System: Android-TV-Player-App + Pairing-Backend + Web-Panel.
 Freischaltung ist getrennt vom Pairing: ein Player muss erst `activate` werden
 (siehe Admin-CLI), sonst wird der Login verweigert.
 
-## App-Features (Stand v0.3.1)
+## App-Features (Stand v0.4.0)
 
 **Live-TV**
 - Kategorie-Sidebar + Kanalliste mit echten Sendernlogos, EPG („Jetzt/Danach"),
@@ -42,7 +42,7 @@ Freischaltung ist getrennt vom Pairing: ein Player muss erst `activate` werden
 - EPG-Grid (Tagesübersicht), Parental Control (PIN-Gate, FSK-Bewertung)
 
 **VOD (Filme & Serien)**
-- Cover-Grid mit Gold-Fokus, Kategorie-Sidebar
+- Cover-Grid mit Gold-Fokus (Rahmen nur um das fokussierte Cover)
 - Film-/Serien-Detailseiten: Cover, Jahr, Kategorie, Sterne-Bewertung, Trailer-Button
 - **TMDB-Beschreibungen** (deutsch) über Backend-Proxy — der TMDB-API-Key liegt
   ausschließlich im Backend-Env (`TMDB_API_KEY`), nie in der App; 24h-Disk-Cache
@@ -50,11 +50,27 @@ Freischaltung ist getrennt vom Pairing: ein Player muss erst `activate` werden
   => Menü „Nach oben / Nach unten / Ausblenden / Alle einblenden"
   (Sortierung + Ausblendung pro Bereich Filme/Serien persistiert)
 - Kategoriewahl + Suche überleben das Öffnen/Schließen einer Detailseite
+- **Fortsetzen**: Abbruchposition wird pro Film/Episode gespeichert; beim
+  erneuten Öffnen springt der Titel an die letzte Stelle (Button „▶ Fortsetzen"),
+  daneben „↺ Von vorne" zum Neustart. Titel zu >95 % durchgespielt gelten als fertig.
+- Episoden-Liste mit Gold-Fokus-Rahmen am gewählten Eintrag
+
+**Player / Stabilität**
+- VOD-Reconnect springt an die aktuelle Position (nicht auf 0); zu Ende
+  gespielte VOD-Titel starten nicht neu
+- Moderater Puffer (20–40 s) statt 120 s: verhindert, dass 4K-VOD
+  (~35 Mbit/s) auf 2-GB-Geräten den CMA-/Heap-Speicher leersaugt und den
+  Hardware-Decoder mit „Source error" aussteigen lässt
 
 **Pairing / Account**
 - Pairing-Screen beim ersten Start (Player-ID + Passwort, beides gerätegeneriert)
 - Selbst-Registrierung beim ersten Web-Login (IBPlayer-Modell)
 - Einstellungen: Player-ID/Status, Cache-Größe + Löschen, Support-Formular
+
+## Git / Repo
+
+- Lokales Repo + Bare-Backup auf dem VPS: `origin = smarty@10.13.37.1:git/smartys-iptv.git`
+  (kein GitHub). Nach Änderungen: `git push`.
 
 ## Backend lokal starten
 
