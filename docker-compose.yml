@@ -24,3 +24,10 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:8101:80"
+
+  player-site:
+    build: ./site-player
+    container_name: player-site
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8102:80"

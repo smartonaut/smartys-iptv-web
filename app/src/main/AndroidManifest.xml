@@ -7,7 +7,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <application
-        android:label="Smartys IPTV"
+        android:label="Smartys M3U Player"
         android:icon="@mipmap/ic_launcher"
         android:banner="@mipmap/banner"
         android:usesCleartextTraffic="true"

@@ -190,7 +190,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                 }
                 InfoRow("Status", statusText)
                 Text(
-                    "Mit Player-ID und Pairing-Passwort meldest du dich auf player.smartys.tech an. " +
+                    "Mit Player-ID und Pairing-Passwort meldest du dich auf panel.smartys.tech an. " +
                     "Das Passwort erhältst du vom Support.",
                     color = Color(0xFF6B7A99), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)
                 )
@@ -247,7 +247,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             }
             Spacer(Modifier.height(18.dp))
             Text(
-                "Smartys IPTV v0.2 · player.smartys.tech",
+                "Smartys M3U Player v0.2 · panel.smartys.tech",
                 color = Color(0xFF4D5B78), fontSize = 11.sp
             )
         }
@@ -324,7 +324,7 @@ fun PairingScreen(vm: MainViewModel) {
         Spacer(Modifier.height(24.dp))
 
         Text(
-            "1. Gehe auf player.smartys.tech\n" +
+            "1. Gehe auf panel.smartys.tech\n" +
             "2. Melde dich mit Player-ID und Passwort an\n" +
             "3. Hinterlege dort deine Playlist — danach hier auf „Prüfen“ drücken",
             color = Color(0xFF8FA3C8), fontSize = 15.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -338,7 +338,7 @@ fun PairingScreen(vm: MainViewModel) {
         } else {
             Button(onClick = {
                 android.util.Log.d("SmartysIPTV", "Pruefen-Button geklickt, pairAndLoad startet")
-                busy = true; msg = "Verbinde mit player.smartys.tech…"
+                busy = true; msg = "Verbinde mit panel.smartys.tech…"
                 kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
                     val ok = vm.pairAndLoad(playerId, pairingPw)
                     android.util.Log.d("SmartysIPTV", "pairAndLoad Ergebnis: $ok")
