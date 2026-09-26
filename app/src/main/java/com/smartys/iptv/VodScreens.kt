@@ -547,6 +547,25 @@ fun MovieDetail(
                         }
                     }
                 }
+                if (canResume) {
+                    // Zweiter Button: von vorne beginnen (löscht die gespeicherte Position)
+                    Surface(
+                        onClick = {
+                            val c = vm.creds ?: return@Surface
+                            ResumeStore.clear(ctx, "movie:${movie.streamId}")
+                            onPlay(VodPlayback(c.movieUrl(movie.streamId, movie.containerExtension ?: "mp4"), movie.name, key = "movie:${movie.streamId}", startPosMs = 0L))
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF141A2A),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
+                    ) {
+                        Text(
+                            "↺ Von vorne",
+                            color = Color(0xFFFFC94D), fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 13.dp)
+                        )
+                    }
+                }
                 if (movie.hasTrailer()) {
                     Surface(
                         onClick = {
