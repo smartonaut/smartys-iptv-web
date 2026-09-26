@@ -1,0 +1,26 @@
+services:
+  iptv-backend:
+    build: ./backend
+    container_name: iptv-backend
+    restart: unless-stopped
+    environment:
+      - IPTV_DB_FILE=/data/iptv.db
+      - IPTV_KEY_FILE=/data/crypto.key
+      - SESSION_SECRET=${SESSION_SECRET}
+      - IPTV_LICENSE_SECRET=${IPTV_LICENSE_SECRET}
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8100:8100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8100/api/v1/health')"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  iptv-site:
+    build: ./site-nginx
+    container_name: iptv-site
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8101:80"

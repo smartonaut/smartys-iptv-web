@@ -1,0 +1,31 @@
+# ---------- Build-Artefakte ----------
+.gradle/
+.kotlin/
+build/
+app/build/
+*/build/
+
+# ---------- Lokale Gradle-Distribution (Wrapper nicht eingecheckt) ----------
+gradle-8.14.3/
+.gradle-cache/
+
+# ---------- Maschinenspezifisch ----------
+local.properties
+*.iml
+.idea/
+.DS_Store
+
+# ---------- Secrets / Runtime-Daten (NIE committen!) ----------
+.env
+.env.*
+!.env.example
+data/
+*.key
+*.pem
+*.jks
+*.keystore
+
+# ---------- Logs / Cache ----------
+*.log
+*.pyc
+__pycache__/

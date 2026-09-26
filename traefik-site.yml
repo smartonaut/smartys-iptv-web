@@ -1,0 +1,28 @@
+http:
+  routers:
+    site:
+      rule: "Host(`smartys.tech`) || Host(`www.smartys.tech`)"
+      entryPoints:
+        - "websecure"
+      service: site
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - sec-headers-site
+
+  services:
+    site:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8101"
+
+  middlewares:
+    sec-headers-site:
+      headers:
+        frameDeny: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        referrerPolicy: same-origin
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        forceSTSHeader: true
