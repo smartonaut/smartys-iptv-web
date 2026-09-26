@@ -179,55 +179,42 @@ fun MovieCard(movie: VodStream, onClick: () -> Unit, focusRequester: FocusReques
     Column(
         Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-            .focusable()
+            .clickable(onClick = onClick)
     ) {
-        // Poster-Box: bei Fokus dicker Gold-Rahmen + Poster verkleinert
-        // (dunkler Spalt), damit der Rahmen unabhängig vom Poster-Motiv
-        // deutlich sichtbar ist — wie ein Fokus-Rahmen auf dunklem Grund.
+        // Poster: goldener Rahmen NUR bei Fokus (eckig, wie im Menü)
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .background(Color(0xFF0B0E14))
                 .border(
-                    width = if (focused) 6.dp else 0.dp,
-                    color = Color(0xFFFFC94D),
-                    shape = RoundedCornerShape(12.dp)
+                    width = if (focused) 3.dp else 0.dp,
+                    color = Color(0xFFFFC94D)
                 )
-                .padding(if (focused) 8.dp else 0.dp)
         ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(if (focused) 8.dp else 0.dp))
-                    .background(Color(0xFF141A2A))
-            ) {
-                AsyncImage(
-                    model = movie.poster(),
-                    contentDescription = movie.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                movie.rating5Based?.let { r ->
-                    if (r > 0) {
-                        Text(
-                            "★ ${String.format("%.1f", r)}",
-                            color = Color(0xFF0B0E14), fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
-                                .background(Color(0xFFFFC94D), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                if (focused) {
+            AsyncImage(
+                model = movie.poster(),
+                contentDescription = movie.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            movie.rating5Based?.let { r ->
+                if (r > 0) {
                     Text(
-                        "▶",
-                        color = Color(0xFF0B0E14), fontSize = 40.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.Center)
-                            .background(Color(0xFFFFC94D), RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 8.dp)
+                        "★ ${String.format("%.1f", r)}",
+                        color = Color(0xFF0B0E14), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(6.dp)
+                            .background(Color(0xFFFFC94D), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
+            }
+            if (focused) {
+                Text(
+                    "▶",
+                    color = Color(0xFF0B0E14), fontSize = 40.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.Center)
+                        .background(Color(0xFFFFC94D), RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 8.dp)
+                )
             }
         }
         // Titel: fokussiert = voller Gold-Balken mit dunkler Schrift
@@ -336,32 +323,21 @@ fun SeriesGrid(
                     Column(
                         Modifier
                             .then(if (show.seriesId == focusRestoreId) Modifier.focusRequester(seriesRestoreFocus) else Modifier)
-                            .clickable { onOpen(show) }
                             .onFocusChanged { focused = it.isFocused }
-                            .focusable()
+                            .clickable { onOpen(show) }
                     ) {
                         Box(
                             Modifier
                                 .fillMaxWidth()
                                 .aspectRatio(2f / 3f)
-                                .background(Color(0xFF0B0E14))
                                 .border(
-                                    width = if (focused) 6.dp else 0.dp,
-                                    color = Color(0xFFFFC94D),
-                                    shape = RoundedCornerShape(12.dp)
+                                    width = if (focused) 3.dp else 0.dp,
+                                    color = Color(0xFFFFC94D)
                                 )
-                                .padding(if (focused) 8.dp else 0.dp)
                         ) {
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(if (focused) 8.dp else 0.dp))
-                                    .background(Color(0xFF141A2A))
-                            ) {
-                                AsyncImage(model = show.cover, contentDescription = show.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                                if (focused) {
-                                    Text("▶", color = Color(0xFF0B0E14), fontSize = 40.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Center).background(Color(0xFFFFC94D), RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 8.dp))
-                                }
+                            AsyncImage(model = show.cover, contentDescription = show.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                            if (focused) {
+                                Text("▶", color = Color(0xFF0B0E14), fontSize = 40.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Center).background(Color(0xFFFFC94D), RoundedCornerShape(12.dp)).padding(horizontal = 18.dp, vertical = 8.dp))
                             }
                         }
                         Text(show.name, color = if (focused) Color(0xFF0B0E14) else Color(0xFFB8C4DE), fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth().then(if (focused) Modifier.background(Color(0xFFFFC94D)) else Modifier).padding(10.dp))
