@@ -418,16 +418,19 @@ fun SeriesDetail(
                     val eps = activeSeason?.let { episodes[it] }.orEmpty()
                     items(eps) { ep ->
                         val c = vm.creds
+                        var epFocused by remember { mutableStateOf(false) }
                         Surface(
                             onClick = { c?.let { onPlay(VodPlayback(c.seriesUrl(ep.id, ep.containerExtension ?: "mp4"), ep.title ?: "${show.name} S${activeSeason}E${ep.episodeNum}")) } },
                             shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFF10141F),
+                            color = if (epFocused) Color(0xFF1A2238) else Color(0xFF10141F),
+                            border = if (epFocused) androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D)) else null,
                             modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                                .onFocusChanged { epFocused = it.isFocused }
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                                 Text("S${activeSeason ?: "?"}E${ep.episodeNum ?: "-"}", color = Color(0xFF55648A), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(56.dp))
-                                Text(ep.title ?: "Episode ${ep.episodeNum}", color = Color(0xFFE8EEFC), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                Text("▶", color = Color(0xFF8FA3C8), fontSize = 14.sp)
+                                Text(ep.title ?: "Episode ${ep.episodeNum}", color = if (epFocused) Color(0xFFE8EEFC) else Color(0xFFE8EEFC), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Text("▶", color = if (epFocused) Color(0xFFFFC94D) else Color(0xFF8FA3C8), fontSize = 14.sp)
                             }
                         }
                     }
