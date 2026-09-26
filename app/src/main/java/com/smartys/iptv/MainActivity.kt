@@ -97,6 +97,39 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         player.value?.stop()
     }
 
+    // Auto-Save der VOD-Position: alle 2 Minuten sichern, damit auch ein
+    // unsauberes Verlassen (Fehldruck, Home-Taste, App-Kill) fortsetzbar bleibt.
+    // Läuft nur solange ein VOD-Titel aktiv ist.
+    LaunchedEffect(vodPlaying.value) {
+        if (vodPlaying.value == null) return@LaunchedEffect
+        while (true) {
+            kotlinx.coroutines.delay(120_000L)
+            val vod = vodPlaying.value ?: break
+            val exo = player.value?.player
+            if (exo != null) {
+                val pos = exo.currentPosition
+                if (pos > 0L) ResumeStore.save(appCtx, vod.key, pos, exo.duration)
+            }
+        }
+    }
+
+    // Zusätzlich: Position beim Verlassen in den Hintergrund sichern (Home-Taste etc.).
+    DisposableEffect(appCtx) {
+        val owner = appCtx as? androidx.lifecycle.LifecycleOwner
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                val vod = vodPlaying.value
+                val exo = player.value?.player
+                if (vod != null && exo != null) {
+                    val pos = exo.currentPosition
+                    if (pos > 0L) ResumeStore.save(appCtx, vod.key, pos, exo.duration)
+                }
+            }
+        }
+        owner?.lifecycle?.addObserver(obs)
+        onDispose { owner?.lifecycle?.removeObserver(obs) }
+    }
+
     // Globale Back-Navigation: Sub-Screens zuerst schließen, dann Tab zurueck,
     // erst auf Live-TV-Ebene doppelt-Back => "App wirklich schließen?"-Dialog.
     androidx.activity.compose.BackHandler(enabled = true) {
@@ -302,15 +335,92 @@ fun MainTabs(current: String, onChange: (String) -> Unit) {
 
 @Composable
 fun VodPlayerScreen(vod: VodPlayback, player: ExoPlayer?, onBack: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    var showOsd by remember { mutableStateOf(false) }
+    var osdMsg by remember { mutableStateOf("") }
+
+    // OSD nach kurzer Zeit automatisch ausblenden.
+    LaunchedEffect(showOsd) {
+        if (showOsd) {
+            kotlinx.coroutines.delay(2500)
+            showOsd = false
+        }
+    }
+
+    fun fmt(ms: Long): String {
+        if (ms <= 0L) return "--:--"
+        val s = ms / 1000
+        return String.format("%d:%02d", s / 60, s % 60)
+    }
+
+    // Vor-/Zurückspulen: 10s pro Tastendruck, begrenzt auf 0..Dauer.
+    fun seek(deltaMs: Long) {
+        val exo = player ?: return
+        val dur = exo.duration
+        val max = if (dur > 0L) dur else Long.MAX_VALUE
+        val target = (exo.currentPosition + deltaMs).coerceIn(0L, max)
+        exo.seekTo(target)
+        osdMsg = (if (deltaMs >= 0L) "+" else "") + (deltaMs / 1000) + "s"
+        showOsd = true
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .focusable()
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (keyEvent.key) {
+                    Key.DirectionLeft, Key.MediaRewind -> { seek(-10_000L); true }
+                    Key.DirectionRight, Key.MediaFastForward -> { seek(10_000L); true }
+                    Key.DirectionCenter, Key.Enter, Key.MediaPlayPause -> {
+                        val exo = player
+                        if (exo != null) {
+                            if (exo.isPlaying) { exo.pause(); osdMsg = "Pause" }
+                            else { exo.play(); osdMsg = "▶" }
+                            showOsd = true
+                        }
+                        true
+                    }
+                    Key.Back, Key.Escape -> { onBack(); true }
+                    else -> false
+                }
+            }
+    ) {
         AndroidView(
             factory = { ctx ->
-                PlayerView(ctx).apply { this.player = player; useController = true }
+                PlayerView(ctx).apply { this.player = player; useController = false }
             },
             modifier = Modifier.fillMaxSize()
         )
         TextButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).padding(16.dp)) {
             Text("← ${vod.title}", color = Color.White, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (showOsd) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(28.dp)
+                    .width(420.dp)
+                    .background(Color(0x660B0E14), MaterialTheme.shapes.large)
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+            ) {
+                Text(vod.title, color = Color(0xFFE8EEFC), fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (osdMsg.isNotBlank()) {
+                        Text(
+                            osdMsg, color = Color(0xFF0B0E14), fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.background(Color(0xFFFFC94D), MaterialTheme.shapes.extraLarge).padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                    }
+                    Text(
+                        "${fmt(player?.currentPosition ?: 0L)} / ${fmt(player?.duration ?: 0L)}",
+                        color = Color(0xFF8FA3C8), fontSize = 15.sp, fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }

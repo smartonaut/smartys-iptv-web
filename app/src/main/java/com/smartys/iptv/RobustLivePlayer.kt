@@ -2,6 +2,7 @@ package com.smartys.iptv
 
 import android.content.Context
 import android.util.Log
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -42,7 +43,19 @@ class RobustLivePlayer(ctx: Context) {
                 .build()
         )
         .build()
-        .apply { playWhenReady = true }
+        .apply {
+            playWhenReady = true
+            // Audio-Fokus anfordern: pausiert andere Musik-Apps (Amazon Music, Spotify …)
+            // automatisch, sobald hier etwas abgespielt wird. Verhindert, dass ein
+            // Hörspiel im Hintergrund parallel weiterläuft.
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                    .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                true  // handleAudioFocus = true
+            )
+        }
 
     private var currentUrl: String? = null
     private var currentChannelId: String? = null
