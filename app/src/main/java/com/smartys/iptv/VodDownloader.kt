@@ -118,7 +118,11 @@ object VodDownloader {
                 connectTimeout = 15000
                 readTimeout = 30000
                 instanceFollowRedirects = true
-                if (startFrom > 0L) setRequestProperty("Range", "bytes=$startFrom-")
+                // Immer einen Range-Request senden (auch beim Erststart):
+                // manche Xtream-/nginx-Server liefern bei einem plain GET ohne
+                // Range Content-Length:0 => leere Datei. Range erzwingt Streaming.
+                setRequestProperty("Range", "bytes=$startFrom-")
+                setRequestProperty("User-Agent", "SmartysIPTV/0.4 (okhttp)")
             }
             var code = conn.responseCode
             val resume = code == 206 && startFrom > 0L
@@ -160,10 +164,28 @@ object VodDownloader {
             }
             raf.close(); raf = null
 
-            // Fertig: .part -> endgueltiger Name.
-            partFile.renameTo(finalFile)
-            update(id) { it.copy(downloadedBytes = finalFile.length(), status = "complete", error = null) }
-            persist(ctx)
+            // Vollständigkeits-Prüfung: niemals "complete" markieren, wenn der
+            // Server nichts (0 Bytes) oder weniger als erwartet geliefert hat.
+            // (Bug: leere Streams wie Content-Length:0 wurden als fertig gezeigt.)
+            val got = partFile.length()
+            when {
+                got <= 0L -> {
+                    partFile.delete()
+                    update(id) { it.copy(downloadedBytes = 0L, status = "error", error = "Server lieferte keine Daten (0 Bytes)") }
+                    persist(ctx)
+                }
+                total > 0L && got < total -> {
+                    // Abgebrochen/trunkiert: .part behalten fuer spaeteres Resume.
+                    update(id) { it.copy(downloadedBytes = got, status = "error", error = "Unvollständig: $got von $total Bytes") }
+                    persist(ctx)
+                }
+                else -> {
+                    // Fertig: .part -> endgueltiger Name.
+                    partFile.renameTo(finalFile)
+                    update(id) { it.copy(downloadedBytes = finalFile.length(), status = "complete", error = null) }
+                    persist(ctx)
+                }
+            }
         } catch (e: Exception) {
             // Bei absichtlichem Pause/Abbruch nicht als Fehler markieren.
             if (paused[id] != true && jobs[id]?.isCancelled != true) {
