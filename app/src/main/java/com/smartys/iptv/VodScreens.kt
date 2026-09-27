@@ -433,6 +433,17 @@ fun SeriesDetail(
                         val c = vm.creds
                         val idx = playlist.indexOfFirst { it.id == ep.id }
                         var epFocused by remember { mutableStateOf(false) }
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        val dlId = "series:${ep.id}"
+                        val dl = VodDownloader.items.firstOrNull { it.id == dlId }
+                        val dlState = when {
+                            dl == null -> "idle"
+                            dl.status == "complete" -> "done"
+                            dl.status == "running" -> "running"
+                            dl.status == "paused" -> "paused"
+                            else -> "error"
+                        }
+                        val epTitle = ep.title ?: "Episode ${ep.episodeNum}"
                         Surface(
                             onClick = {
                                 c?.let {
@@ -454,7 +465,49 @@ fun SeriesDetail(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                                 Text("S${activeSeason ?: "?"}E${ep.episodeNum ?: "-"}", color = Color(0xFF55648A), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(56.dp))
-                                Text(ep.title ?: "Episode ${ep.episodeNum}", color = if (epFocused) Color(0xFFE8EEFC) else Color(0xFFE8EEFC), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Text(epTitle, color = if (epFocused) Color(0xFFE8EEFC) else Color(0xFFE8EEFC), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                // Download-Button (pro Episode): offline speichern / Status
+                                var dlFocus by remember { mutableStateOf(false) }
+                                Surface(
+                                    onClick = {
+                                        c?.let {
+                                            val url = c.seriesUrl(ep.id, ep.containerExtension ?: "mp4")
+                                            when (dlState) {
+                                                "idle", "error" -> VodDownloader.start(ctx, dlId, "${show.name} S${activeSeason}E${ep.episodeNum} - ${epTitle}", url, ep.containerExtension ?: "mp4")
+                                                "running" -> VodDownloader.pause(dlId)
+                                                "paused" -> VodDownloader.resume(ctx, dlId)
+                                                "done" -> { /* bereits heruntergeladen */ }
+                                            }
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (dlFocus) Color(0xFF1A2238) else Color(0xFF0B0E14),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, when (dlState) {
+                                        "done" -> Color(0xFF6FCF9F)
+                                        "running", "paused" -> Color(0xFFFFC94D)
+                                        else -> Color(0xFF3A4666)
+                                    }),
+                                    modifier = Modifier.onFocusChanged { dlFocus = it.isFocused }
+                                ) {
+                                    Text(
+                                        when (dlState) {
+                                            "idle" -> "⬇"
+                                            "running" -> "${(dl?.progress?.times(100)?.toInt() ?: 0)}%"
+                                            "paused" -> "▶"
+                                            "done" -> "✓"
+                                            else -> "⚠"
+                                        },
+                                        color = when (dlState) {
+                                            "done" -> Color(0xFF6FCF9F)
+                                            "running", "paused" -> Color(0xFFFFC94D)
+                                            "error" -> Color(0xFFFF6B6B)
+                                            else -> Color(0xFF8FA3C8)
+                                        },
+                                        fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(10.dp))
                                 Text("▶", color = if (epFocused) Color(0xFFFFC94D) else Color(0xFF8FA3C8), fontSize = 14.sp)
                             }
                         }
