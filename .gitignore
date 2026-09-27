@@ -29,3 +29,6 @@ data/
 *.log
 *.pyc
 __pycache__/
+
+# ---------- Quellen-Backups (lokale tgz-Snapshots, nie einchecken) ----------
+backups/

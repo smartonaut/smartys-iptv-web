@@ -365,7 +365,7 @@ fun SeriesGrid(
 fun SeriesDetail(
     vm: MainViewModel,
     show: SeriesStream,
-    onPlay: (VodPlayback) -> Unit,
+    onPlaySeries: (List<VodPlayback>, Int) -> Unit,
     onBack: () -> Unit
 ) {
     var info by remember { mutableStateOf<SeriesInfo?>(null) }
@@ -427,11 +427,25 @@ fun SeriesDetail(
                     // Episoden der gewählten Staffel
                     val activeSeason = seasonKeys.firstOrNull { selectedSeason == it.toIntOrNull() } ?: seasonKeys.firstOrNull()
                     val eps = activeSeason?.let { episodes[it] }.orEmpty()
-                    items(eps) { ep ->
+                    // Wiedergabeliste: Episoden der Staffel numerisch sortiert => Auto-Advance
+                    val playlist = eps.sortedBy { it.episodeNum?.toIntOrNull() ?: Int.MAX_VALUE }
+                    items(playlist) { ep ->
                         val c = vm.creds
+                        val idx = playlist.indexOfFirst { it.id == ep.id }
                         var epFocused by remember { mutableStateOf(false) }
                         Surface(
-                            onClick = { c?.let { onPlay(VodPlayback(c.seriesUrl(ep.id, ep.containerExtension ?: "mp4"), ep.title ?: "${show.name} S${activeSeason}E${ep.episodeNum}", key = "series:${ep.id}")) } },
+                            onClick = {
+                                c?.let {
+                                    val list = playlist.map { e ->
+                                        VodPlayback(
+                                            c.seriesUrl(e.id, e.containerExtension ?: "mp4"),
+                                            e.title ?: "${show.name} S${activeSeason}E${e.episodeNum}",
+                                            key = "series:${e.id}"
+                                        )
+                                    }
+                                    onPlaySeries(list, idx)
+                                }
+                            },
                             shape = RoundedCornerShape(10.dp),
                             color = if (epFocused) Color(0xFF1A2238) else Color(0xFF10141F),
                             border = if (epFocused) androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D)) else null,

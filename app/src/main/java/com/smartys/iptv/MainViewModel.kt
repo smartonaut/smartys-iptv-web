@@ -2,6 +2,7 @@ package com.smartys.iptv
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -345,6 +346,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             ?.split(',')?.filter { it.isNotBlank() }?.take(10) ?: emptyList()
     }
 
+    /** Liest profilgebundene Favoriten/Zuletzt-gesehen nach einem Profilwechsel neu. */
+    fun reloadProfileState() {
+        favorites = getPrefs().getStringSet("favorites", emptySet()) ?: emptySet()
+        lastWatched = getPrefs().getString("last_watched", null)
+        loadRecent()
+    }
+
     fun logout(ctx: Context) {
         CredStore.clear(ctx)
         creds = null
@@ -435,8 +443,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         XmltvEpg.clearCache()
     }
 
-    private fun getPrefs() =
-        getApplication<Application>().getSharedPreferences("smartys_iptv_state", Context.MODE_PRIVATE)
+    private fun getPrefs(): SharedPreferences {
+        val app = getApplication<Application>()
+        val pid = ProfileStore.activeId(app) ?: "default"
+        return app.getSharedPreferences("smartys_iptv_state__$pid", Context.MODE_PRIVATE)
+    }
 
     private suspend fun <T> withContextMain(block: () -> T) =
         kotlinx.coroutines.withContext(Dispatchers.Main) { block() }

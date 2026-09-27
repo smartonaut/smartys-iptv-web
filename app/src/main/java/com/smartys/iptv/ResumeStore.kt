@@ -18,8 +18,10 @@ object ResumeStore {
 
     private const val PREFS = "smartys_iptv_resume"
 
-    private fun prefs(ctx: Context): SharedPreferences =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun prefs(ctx: Context): SharedPreferences {
+        val pid = ProfileStore.activeId(ctx) ?: "default"
+        return ctx.getSharedPreferences("${PREFS}__$pid", Context.MODE_PRIVATE)
+    }
 
     /** Position (ms) für einen Titel, oder 0 wenn nichts gespeichert. */
     fun position(ctx: Context, key: String): Long =

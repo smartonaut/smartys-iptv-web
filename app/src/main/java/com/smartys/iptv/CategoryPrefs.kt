@@ -1,6 +1,7 @@
 package com.smartys.iptv
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONObject
 
 /**
@@ -15,7 +16,10 @@ object CategoryPrefs {
     private const val K_ORDER = "order_%s"       // "movies" | "series"
     private const val K_HIDDEN = "hidden_%s"
 
-    private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun prefs(ctx: Context): SharedPreferences {
+        val pid = ProfileStore.activeId(ctx) ?: "default"
+        return ctx.getSharedPreferences("${PREFS}__$pid", Context.MODE_PRIVATE)
+    }
 
     /** Sichtbar sortierte Kategorie-Liste: zuerst nach manueller Order, Rest in Original-Reihenfolge; hidden gefiltert. */
     fun applyTo(scope: String, cats: List<Category>): List<Category> {
