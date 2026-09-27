@@ -27,6 +27,9 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -53,9 +56,32 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                App(autoUrl = autoUrl, autoUser = autoUser, autoPass = autoPass)
+                ScaledUi {
+                    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                        App(autoUrl = autoUrl, autoUser = autoUser, autoPass = autoPass)
+                    }
+                }
             }
         }
+    }
+}
+
+/**
+ * Dynamische Bildschirmanpassung: Die UI ist auf Fire-TV kalibriert
+ * (1920x1080 @ 320dpi => 540 dp kurze Seite). Auf kleineren Screens
+ * (z.B. Handy im Querformat => 360 dp) werden alle dp/sp proportional
+ * runterskaliert, damit Cover, Buttons und Texte automatisch passen.
+ * Fire-TV bleibt unveraendert (Faktor 1.0).
+ */
+@Composable
+fun ScaledUi(content: @Composable () -> Unit) {
+    val config = LocalConfiguration.current
+    val base = LocalDensity.current
+    val shortSide = minOf(config.screenWidthDp, config.screenHeightDp).toFloat()
+    val scale = (shortSide / 540f).coerceIn(0.5f, 1f)
+    val scaled = Density(base.density * scale, base.fontScale * scale)
+    CompositionLocalProvider(LocalDensity provides scaled) {
+        content()
     }
 }
 
