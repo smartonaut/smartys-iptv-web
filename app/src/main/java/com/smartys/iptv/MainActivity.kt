@@ -92,6 +92,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     var profilesReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         ProfileStore.ensureDefault(appCtx)
+        VodDownloader.load(appCtx)
         profilesReady = true
         // activeProfile bleibt bewusst null => "Wer schaut?"-Picker beim App-Start
         // (Netflix-Stil). Erst nach Auswahl wird das Profil gesetzt.
@@ -757,6 +758,38 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
                             refreshCacheSize()
                         } catch (_: Exception) {}
                     }) { Text("Cache löschen", color = Color(0xFFFFC94D), fontSize = 14.sp) }
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+
+            // ---- Downloads (VOD lokal) ----
+            Section("Downloads") {
+                val downloads = VodDownloader.items
+                if (downloads.isEmpty()) {
+                    Text("Noch keine Downloads. In der Filmdetailseite „⬇ Herunterladen“ wählen.", color = Color(0xFF6B7A99), fontSize = 13.sp)
+                } else {
+                    downloads.forEach { d ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text(d.title, color = Color(0xFFE8EEFC), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    when (d.status) {
+                                        "complete" -> "✓ fertig (${d.downloadedBytes / 1024 / 1024} MB)"
+                                        "running" -> "lädt… ${(d.progress * 100).toInt()}%"
+                                        "paused" -> "pausiert (${(d.progress * 100).toInt()}%)"
+                                        else -> "Fehler: ${d.error ?: "unbekannt"}"
+                                    },
+                                    color = Color(0xFF6B7A99), fontSize = 12.sp
+                                )
+                            }
+                            if (d.status == "running") {
+                                TextButton(onClick = { VodDownloader.pause(d.id) }) { Text("Pause", color = Color(0xFFFFC94D), fontSize = 13.sp) }
+                            } else if (d.status == "paused") {
+                                TextButton(onClick = { VodDownloader.resume(appCtx, d.id) }) { Text("Fortsetzen", color = Color(0xFF6FCF9F), fontSize = 13.sp) }
+                            }
+                            TextButton(onClick = { VodDownloader.delete(appCtx, d.id) }) { Text("Löschen", color = Color(0xFFFF6B6B), fontSize = 13.sp) }
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(18.dp))
