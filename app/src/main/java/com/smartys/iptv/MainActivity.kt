@@ -69,9 +69,9 @@ class MainActivity : ComponentActivity() {
 /**
  * Dynamische Bildschirmanpassung: Die UI ist auf Fire-TV kalibriert
  * (1920x1080 @ 320dpi => 540 dp kurze Seite). Auf kleineren Screens
- * (z.B. Handy im Querformat => 360 dp) werden alle dp/sp proportional
- * runterskaliert, damit Cover, Buttons und Texte automatisch passen.
- * Fire-TV bleibt unveraendert (Faktor 1.0).
+ * (z.B. Handy im Querformat => 360 dp) werden Cover, Buttons und Layout
+ * (dp) proportional verkleinert. Texte (sp) behalten ihre Größe, damit
+ * Menüs lesbar bleiben. Fire-TV bleibt unveraendert (Faktor 1.0).
  */
 @Composable
 fun ScaledUi(content: @Composable () -> Unit) {
@@ -79,7 +79,10 @@ fun ScaledUi(content: @Composable () -> Unit) {
     val base = LocalDensity.current
     val shortSide = minOf(config.screenWidthDp, config.screenHeightDp).toFloat()
     val scale = (shortSide / 540f).coerceIn(0.5f, 1f)
-    val scaled = Density(base.density * scale, base.fontScale * scale)
+    // NUR density skalieren (dp: Cover/Buttons/Layout). fontScale gegenläufig,
+    // damit sp-Texte ihre Größe BEHALTEN — sp hängt von density UND fontScale
+    // ab, sonst würde der Text doppelt verkleinert und unlesbar.
+    val scaled = Density(base.density * scale, base.fontScale / scale)
     CompositionLocalProvider(LocalDensity provides scaled) {
         content()
     }
