@@ -611,6 +611,47 @@ fun MovieDetail(
                         )
                     }
                 }
+                // Download-Button: VOD lokal speichern (mit Resume-Support)
+                val dl = VodDownloader.items.firstOrNull { it.id == "movie:${movie.streamId}" }
+                val dlState = when {
+                    dl == null -> "idle"
+                    dl.status == "complete" -> "done"
+                    dl.status == "running" -> "running"
+                    dl.status == "paused" -> "paused"
+                    else -> "error"
+                }
+                Surface(
+                    onClick = {
+                        val c = vm.creds ?: return@Surface
+                        val url = c.movieUrl(movie.streamId, movie.containerExtension ?: "mp4")
+                        when (dlState) {
+                            "idle", "error" -> VodDownloader.start(ctx, "movie:${movie.streamId}", movie.name, url, movie.containerExtension ?: "mp4")
+                            "running" -> VodDownloader.pause("movie:${movie.streamId}")
+                            "paused" -> VodDownloader.resume(ctx, "movie:${movie.streamId}")
+                            "done" -> { /* bereits heruntergeladen */ }
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF141A2A),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 28.dp, vertical = 13.dp)) {
+                        Text(
+                            when (dlState) {
+                                "idle" -> "⬇ Herunterladen"
+                                "running" -> "⏸ ${(dl?.progress?.times(100)?.toInt() ?: 0)}%"
+                                "paused" -> "▶ Fortsetzen"
+                                "done" -> "✓ Heruntergeladen"
+                                else -> "⚠ Erneut versuchen"
+                            },
+                            color = when {
+                                dlState == "done" -> Color(0xFF6FCF9F)
+                                else -> Color(0xFFE8EEFC)
+                            },
+                            fontSize = 17.sp, fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(20.dp))
 
