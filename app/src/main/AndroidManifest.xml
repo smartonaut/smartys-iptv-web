@@ -7,6 +7,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <application
+        android:name=".IptvApp"
         android:label="Smarty Player"
         android:icon="@mipmap/ic_launcher"
         android:banner="@mipmap/banner"
