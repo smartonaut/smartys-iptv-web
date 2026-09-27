@@ -82,7 +82,10 @@ fun ScaledUi(content: @Composable () -> Unit) {
     // NUR density skalieren (dp: Cover/Buttons/Layout). fontScale gegenläufig,
     // damit sp-Texte ihre Größe BEHALTEN — sp hängt von density UND fontScale
     // ab, sonst würde der Text doppelt verkleinert und unlesbar.
-    val scaled = Density(base.density * scale, base.fontScale / scale)
+    // Auf kleinen Screens zusätzlich ein leichtes Absenken (0.9), damit der
+    // Text etwas kompakter wird — auf Fire-TV (scale 1.0) bleibt er unverändert.
+    val textFactor = if (scale < 1f) 0.9f else 1f
+    val scaled = Density(base.density * scale, (base.fontScale / scale) * textFactor)
     CompositionLocalProvider(LocalDensity provides scaled) {
         content()
     }
@@ -122,11 +125,11 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     var activeProfile by remember { mutableStateOf<Profile?>(null) }
     var profilesReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        ProfileStore.ensureDefault(appCtx)
+        // Beim App-Start direkt das aktive (Standard-)Profil wählen — kein Picker.
+        // Profilwechsel bleibt über "Einstellungen -> Profil wechseln" möglich.
+        activeProfile = ProfileStore.ensureDefault(appCtx)
         VodDownloader.load(appCtx)
         profilesReady = true
-        // activeProfile bleibt bewusst null => "Wer schaut?"-Picker beim App-Start
-        // (Netflix-Stil). Erst nach Auswahl wird das Profil gesetzt.
     }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
