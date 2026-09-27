@@ -105,6 +105,8 @@ class RobustLivePlayer(ctx: Context) {
     private var scheduledReconnect = false
     private var pendingSeekMs: Long? = null
     private var isVod = false
+    private var onVodEnded: (() -> Unit)? = null
+    private var vodEndedFired = false
 
     init {
         player.addListener(object : Player.Listener {
@@ -118,6 +120,10 @@ class RobustLivePlayer(ctx: Context) {
                     if (isVod) {
                         // Film/Episode regulär zu Ende — KEIN Reconnect, sonst startet er von vorn.
                         Log.i("SmartysIPTV", "VOD zu Ende gespielt")
+                        if (!vodEndedFired) {
+                            vodEndedFired = true
+                            onVodEnded?.invoke()
+                        }
                     } else {
                         // Live-Stream sollte nie ENDED sein — Provider hat die Verbindung gekappt
                         Log.w("SmartysIPTV", "Live-Stream endete unerwartet -> Reconnect")
@@ -141,10 +147,12 @@ class RobustLivePlayer(ctx: Context) {
     }
 
     /** Titel abspielen. channelId mit "vod:"-Präfix markiert VOD (Film/Serie). */
-    fun playChannel(url: String, channelId: String, onDead: ((String) -> Unit)? = null, startPosMs: Long = 0L) {
+    fun playChannel(url: String, channelId: String, onDead: ((String) -> Unit)? = null, startPosMs: Long = 0L, onVodEnded: (() -> Unit)? = null) {
         currentUrl = url
         currentChannelId = channelId
         onChannelDead = onDead
+        this.onVodEnded = onVodEnded
+        vodEndedFired = false
         isVod = channelId.startsWith("vod:")
         reconnectAttempts = 0
         scheduledReconnect = false

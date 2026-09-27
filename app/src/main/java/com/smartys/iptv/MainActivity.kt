@@ -63,6 +63,17 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     val player = remember { mutableStateOf<RobustLivePlayer?>(null) }
     val playing = remember { mutableStateOf<LiveStream?>(null) }
     val vodPlaying = remember { mutableStateOf<VodPlayback?>(null) }
+    // Serien-Warteschlange + Index für Auto-Advance (nächste Folge beim Abspann)
+    var seriesQueue by remember { mutableStateOf<List<VodPlayback>?>(null) }
+    var seriesIndex by remember { mutableStateOf(0) }
+    // advanceSuppressed: Nutzer hat den Abspann-Wechsel abgebrochen => kein Auto-Advance
+    var advanceSuppressed by remember { mutableStateOf(false) }
+    // advancing: Re-Entry-Schutz (verhindert Doppel-Wechsel)
+    var advancing by remember { mutableStateOf(false) }
+    // Next-Episode-Overlay (Netflix-Stil): sichtbar + Countdown-Wert
+    var nextPending by remember { mutableStateOf(false) }
+    var nextTitle by remember { mutableStateOf<String?>(null) }
+    var nextCountdown by remember { mutableStateOf(5) }
     val openSeries = remember { mutableStateOf<SeriesStream?>(null) }
     val openMovie = remember { mutableStateOf<VodStream?>(null) }
     // VOD-Kategorie-Wahl hier in App() heben: MovieGrid/SeriesGrid werden beim
@@ -76,6 +87,15 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     val lastSeriesId = remember { mutableStateOf<String?>(null) }
     // Parental Control: PIN-Gate beim Start
     var pinUnlocked by remember { mutableStateOf(!ParentalControl.isEnabled(appCtx)) }
+    // Profil-Auswahl: aktives Profil (null = Picker anzeigen). Beim Start default anlegen.
+    var activeProfile by remember { mutableStateOf<Profile?>(null) }
+    var profilesReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        ProfileStore.ensureDefault(appCtx)
+        profilesReady = true
+        // activeProfile bleibt bewusst null => "Wer schaut?"-Picker beim App-Start
+        // (Netflix-Stil). Erst nach Auswahl wird das Profil gesetzt.
+    }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
@@ -94,6 +114,8 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
             if (pos > 0L) ResumeStore.save(appCtx, vod.key, pos, exo.duration)
         }
         vodPlaying.value = null
+        seriesQueue = null
+        nextPending = false
         player.value?.stop()
     }
 
@@ -179,9 +201,92 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
 
     val playVod: (VodPlayback) -> Unit = { vod ->
         vodPlaying.value = vod
+        seriesQueue = null
+        nextPending = false
+        advanceSuppressed = false
+        advancing = false
         // Fortsetzen: gespeicherte Position beim Start wiederherstellen.
         val resume = if (vod.startPosMs > 0L) vod.startPosMs else ResumeStore.position(appCtx, vod.key)
         player.value?.playChannel(vod.url, "vod:${vod.title}", startPosMs = resume)
+    }
+
+    // Nächste Episode aus der Queue, oder null wenn keine mehr folgt.
+    fun nextEpisode(): VodPlayback? = seriesQueue?.getOrNull(seriesIndex + 1)
+
+    // Queue beenden und zurück (letzte Folge erreicht oder abgebrochen).
+    fun endSeriesPlayback() {
+        seriesQueue = null
+        nextPending = false
+        vodPlaying.value = null
+        player.value?.stop()
+    }
+
+    // Abspann erkannt ODER Episode zu Ende: Overlay "Nächste Folge in 5s" zeigen.
+    fun showNextOverlay() {
+        val next = nextEpisode() ?: return
+        if (advanceSuppressed || advancing) return
+        nextTitle = next.title
+        nextPending = true
+    }
+
+    // Wechsel zur nächsten Folge (nach Countdown-Ablauf).
+    fun advanceNext() {
+        if (advancing) return
+        val next = nextEpisode() ?: run { endSeriesPlayback(); return }
+        advancing = true
+        nextPending = false
+        seriesIndex += 1
+        val resume = ResumeStore.position(appCtx, next.key)
+        vodPlaying.value = next
+        player.value?.playChannel(next.url, "vod:${next.title}", startPosMs = resume)
+        advancing = false
+    }
+
+    // Nutzer bricht den Wechsel ab: Credits laufen weiter, kein Auto-Advance.
+    fun cancelNext() {
+        advanceSuppressed = true
+        nextPending = false
+    }
+
+    // Eine Episode starten. onVodEnded = Fallback, falls kein Abspann erkannt wurde.
+    fun startEpisode(ep: VodPlayback, resumeMs: Long = 0L) {
+        vodPlaying.value = ep
+        player.value?.playChannel(ep.url, "vod:${ep.title}", startPosMs = resumeMs) {
+            if (advanceSuppressed) {
+                endSeriesPlayback()
+            } else if (nextEpisode() != null) {
+                advanceNext()
+            } else {
+                endSeriesPlayback()
+            }
+        }
+    }
+
+    // Serien-Warteschlange starten: Folge `index`, danach automatisch weiter.
+    val playSeries: (List<VodPlayback>, Int) -> Unit = { list, index ->
+        if (list.isNotEmpty()) {
+            seriesQueue = list
+            seriesIndex = index.coerceIn(0, list.size - 1)
+            advanceSuppressed = false
+            advancing = false
+            nextPending = false
+            val ep = seriesQueue!![seriesIndex]
+            val resume = ResumeStore.position(appCtx, ep.key)
+            startEpisode(ep, resume)
+        }
+    }
+
+    // Countdown fürs Next-Episode-Overlay: bei 0 => zur nächsten Folge.
+    LaunchedEffect(nextPending) {
+        if (!nextPending) return@LaunchedEffect
+        var c = 5
+        nextCountdown = c
+        while (c > 0 && nextPending) {
+            kotlinx.coroutines.delay(1000)
+            c--
+            nextCountdown = c
+        }
+        if (nextPending) advanceNext()
     }
 
     if (!pinUnlocked) {
@@ -200,71 +305,98 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
             Button(onClick = { vm.retry() }, Modifier.padding(top = 16.dp)) { Text("Erneut versuchen") }
         }
         is AppState.Ready -> {
-            val cur = playing.value
-            val vodCur = vodPlaying.value
-            val seriesCur = openSeries.value
-            val movieCur = openMovie.value
-            when {
-                showSettings -> SettingsScreen(vm = vm, onClose = { showSettings = false })
-                showEpg -> EpgGrid(
-                    vm = vm, channels = s.channels,
-                    onPlay = play,
-                    onBack = { showEpg = false }
-                )
-                cur != null -> PlayerScreen(
-                    vm = vm, player = player.value?.player, channel = cur,
-                    channels = s.channels,
-                    onPlay = play,
-                    onBack = { playing.value = null; player.value?.stop() }
-                )
-                vodCur != null -> VodPlayerScreen(
-                    vod = vodCur, player = player.value?.player,
-                    onBack = { stopVod() }
-                )
-                movieCur != null -> MovieDetail(
-                    vm = vm, movie = movieCur,
-                    onPlay = playVod,
-                    onBack = { openMovie.value = null }
-                )
-                seriesCur != null -> SeriesDetail(
-                    vm = vm, show = seriesCur,
-                    onPlay = playVod,
-                    onBack = { openSeries.value = null }
-                )
-                else -> {
-                    Column(Modifier.fillMaxSize()) {
-                        MainTabs(current = mainTab, onChange = { mainTab = it })
-                        when (mainTab) {
-                            "movies" -> MovieGrid(
-                                vm = vm, categories = vm.vodCategories, movies = vm.vodMovies,
-                                selectedCategory = movieCat.value,
-                                onSelectCategory = { movieCat.value = it },
-                                onOpen = { lastMovieId.value = it.streamId; openMovie.value = it },
-                                focusRestoreId = if (openMovie.value == null) lastMovieId.value else null,
-                                onBack = { mainTab = "live" },
-                                onOpenSettings = { showSettings = true }
-                            )
-                            "series" -> SeriesGrid(
-                                vm = vm, categories = vm.seriesCategories, shows = vm.seriesShows,
-                                selectedCategory = seriesCat.value,
-                                onSelectCategory = { seriesCat.value = it },
-                                onOpen = { lastSeriesId.value = it.seriesId; openSeries.value = it },
-                                focusRestoreId = if (openSeries.value == null) lastSeriesId.value else null,
-                                onBack = { mainTab = "live" },
-                                onOpenSettings = { showSettings = true }
-                            )
-                            else -> ChannelGrid(
-                                vm = vm,
-                                categories = s.categories,
-                                channels = s.channels,
-                                searchQuery = searchQuery,
-                                selectedCategory = selectedCategory,
-                                onSearch = { searchQuery = it },
-                                onSelectCategory = { selectedCategory = it },
-                                onPlay = play,
-                                onOpenSettings = { showSettings = true },
-                                onOpenEpg = { showEpg = true }
-                            )
+            // Profil-Picker erst NACH erfolgreichem Login/Pairing (nie davor!).
+            // Reihenfolge: PinGate -> Pairing/Loading/Error -> erst bei Ready der Picker.
+            if (!profilesReady) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color(0xFFFFC94D)) }
+            } else if (activeProfile == null) {
+                ProfilePickerScreen(onSelected = { p ->
+                    ProfileStore.setActive(appCtx, p.id)
+                    activeProfile = p
+                    vm.reloadProfileState()
+                })
+            } else {
+                val cur = playing.value
+                val vodCur = vodPlaying.value
+                val seriesCur = openSeries.value
+                val movieCur = openMovie.value
+                when {
+                    showSettings -> SettingsScreen(
+                        vm = vm,
+                        onClose = { showSettings = false },
+                        onSwitchProfile = {
+                            showSettings = false
+                            activeProfile = null  // => Profil-Picker anzeigen
+                        }
+                    )
+                    showEpg -> EpgGrid(
+                        vm = vm, channels = s.channels,
+                        onPlay = play,
+                        onBack = { showEpg = false }
+                    )
+                    cur != null -> PlayerScreen(
+                        vm = vm, player = player.value?.player, channel = cur,
+                        channels = s.channels,
+                        onPlay = play,
+                        onBack = { playing.value = null; player.value?.stop() }
+                    )
+                    vodCur != null -> VodPlayerScreen(
+                        vod = vodCur,
+                        player = player.value?.player,
+                        hasNextEpisode = nextEpisode() != null,
+                        nextTitle = nextTitle,
+                        nextPending = nextPending,
+                        nextCountdown = nextCountdown,
+                        onCreditsDetected = { showNextOverlay() },
+                        onCancelNext = { cancelNext() },
+                        onAdvanceNow = { advanceNext() },
+                        onBack = { stopVod() }
+                    )
+                    movieCur != null -> MovieDetail(
+                        vm = vm, movie = movieCur,
+                        onPlay = playVod,
+                        onBack = { openMovie.value = null }
+                    )
+                    seriesCur != null -> SeriesDetail(
+                        vm = vm, show = seriesCur,
+                        onPlaySeries = playSeries,
+                        onBack = { openSeries.value = null }
+                    )
+                    else -> {
+                        Column(Modifier.fillMaxSize()) {
+                            MainTabs(current = mainTab, onChange = { mainTab = it })
+                            when (mainTab) {
+                                "movies" -> MovieGrid(
+                                    vm = vm, categories = vm.vodCategories, movies = vm.vodMovies,
+                                    selectedCategory = movieCat.value,
+                                    onSelectCategory = { movieCat.value = it },
+                                    onOpen = { lastMovieId.value = it.streamId; openMovie.value = it },
+                                    focusRestoreId = if (openMovie.value == null) lastMovieId.value else null,
+                                    onBack = { mainTab = "live" },
+                                    onOpenSettings = { showSettings = true }
+                                )
+                                "series" -> SeriesGrid(
+                                    vm = vm, categories = vm.seriesCategories, shows = vm.seriesShows,
+                                    selectedCategory = seriesCat.value,
+                                    onSelectCategory = { seriesCat.value = it },
+                                    onOpen = { lastSeriesId.value = it.seriesId; openSeries.value = it },
+                                    focusRestoreId = if (openSeries.value == null) lastSeriesId.value else null,
+                                    onBack = { mainTab = "live" },
+                                    onOpenSettings = { showSettings = true }
+                                )
+                                else -> ChannelGrid(
+                                    vm = vm,
+                                    categories = s.categories,
+                                    channels = s.channels,
+                                    searchQuery = searchQuery,
+                                    selectedCategory = selectedCategory,
+                                    onSearch = { searchQuery = it },
+                                    onSelectCategory = { selectedCategory = it },
+                                    onPlay = play,
+                                    onOpenSettings = { showSettings = true },
+                                    onOpenEpg = { showEpg = true }
+                                )
+                            }
                         }
                     }
                 }
@@ -334,9 +466,21 @@ fun MainTabs(current: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-fun VodPlayerScreen(vod: VodPlayback, player: ExoPlayer?, onBack: () -> Unit) {
+fun VodPlayerScreen(
+    vod: VodPlayback,
+    player: ExoPlayer?,
+    hasNextEpisode: Boolean,
+    nextTitle: String?,
+    nextPending: Boolean,
+    nextCountdown: Int,
+    onCreditsDetected: () -> Unit,
+    onCancelNext: () -> Unit,
+    onAdvanceNow: () -> Unit,
+    onBack: () -> Unit
+) {
     var showOsd by remember { mutableStateOf(false) }
     var osdMsg by remember { mutableStateOf("") }
+    var textureView by remember { mutableStateOf<android.view.TextureView?>(null) }
 
     // OSD nach kurzer Zeit automatisch ausblenden.
     LaunchedEffect(showOsd) {
@@ -363,6 +507,27 @@ fun VodPlayerScreen(vod: VodPlayback, player: ExoPlayer?, onBack: () -> Unit) {
         showOsd = true
     }
 
+    // Abspann-Erkennung (nur bei Serien mit Folge danach). Läuft in den letzten
+    // 3 Minuten, sampelt sparsam; erkennt dunkle + ruhige Frames => onCreditsDetected.
+    LaunchedEffect(textureView, hasNextEpisode, vod.key) {
+        if (!hasNextEpisode) return@LaunchedEffect
+        val tv = textureView ?: return@LaunchedEffect
+        val exo = player ?: return@LaunchedEffect
+        val watcher = CreditsWatcher(tv, exo, onCreditsDetected)
+        try {
+            watcher.run()
+        } finally {
+            watcher.stop()
+        }
+    }
+
+    // Beim Verlassen die TextureView-Bindung lösen.
+    DisposableEffect(Unit) {
+        onDispose {
+            textureView?.let { player?.clearVideoTextureView(it) }
+        }
+    }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -371,28 +536,52 @@ fun VodPlayerScreen(vod: VodPlayback, player: ExoPlayer?, onBack: () -> Unit) {
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (keyEvent.key) {
-                    Key.DirectionLeft, Key.MediaRewind -> { seek(-10_000L); true }
-                    Key.DirectionRight, Key.MediaFastForward -> { seek(10_000L); true }
-                    Key.DirectionCenter, Key.Enter, Key.MediaPlayPause -> {
-                        val exo = player
-                        if (exo != null) {
-                            if (exo.isPlaying) { exo.pause(); osdMsg = "Pause" }
-                            else { exo.play(); osdMsg = "▶" }
-                            showOsd = true
+                    Key.Back, Key.Escape -> {
+                        if (nextPending) onCancelNext() else onBack()
+                        true
+                    }
+                    Key.DirectionCenter, Key.Enter -> {
+                        if (nextPending) { onAdvanceNow(); true }
+                        else false
+                    }
+                    Key.DirectionLeft, Key.MediaRewind -> { if (!nextPending) seek(-10_000L); true }
+                    Key.DirectionRight, Key.MediaFastForward -> { if (!nextPending) seek(10_000L); true }
+                    Key.MediaPlayPause -> {
+                        if (!nextPending) {
+                            val exo = player
+                            if (exo != null) {
+                                if (exo.isPlaying) { exo.pause(); osdMsg = "Pause" }
+                                else { exo.play(); osdMsg = "▶" }
+                                showOsd = true
+                            }
                         }
                         true
                     }
-                    Key.Back, Key.Escape -> { onBack(); true }
                     else -> false
                 }
             }
     ) {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply { this.player = player; useController = false }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+        // Nur wenn Credits-Erkennung gebraucht wird (Serien-Folge mit Nachfolger),
+        // eine TextureView verwenden. Sonst normale PlayerView (SurfaceView) = null
+        // Zusatz-Overhead, wichtig für schwache Geräte (Fire TV Stick).
+        if (hasNextEpisode) {
+            AndroidView(
+                factory = { ctx ->
+                    android.view.TextureView(ctx).also { tv ->
+                        textureView = tv
+                        player?.setVideoTextureView(tv)
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply { this.player = player; useController = false }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         TextButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).padding(16.dp)) {
             Text("← ${vod.title}", color = Color.White, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -422,13 +611,61 @@ fun VodPlayerScreen(vod: VodPlayback, player: ExoPlayer?, onBack: () -> Unit) {
                 }
             }
         }
+
+        // ---- Next-Episode-Overlay (Abspann erkannt): Countdown + Abbrechen ----
+        if (nextPending) {
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(28.dp)
+                    .width(640.dp)
+                    .background(Color(0xE60B0E14), MaterialTheme.shapes.large)
+                    .padding(horizontal = 28.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "Nächste Folge in $nextCountdown s",
+                    color = Color(0xFFFFC94D), fontSize = 18.sp, fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(6.dp))
+                nextTitle?.let {
+                    Text(it, color = Color(0xFFE8EEFC), fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(14.dp))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Surface(
+                        onClick = onAdvanceNow,
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFFC94D)
+                    ) {
+                        Text(
+                            "▶ Jetzt starten",
+                            color = Color(0xFF0B0E14), fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                        )
+                    }
+                    Surface(
+                        onClick = onCancelNext,
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF141A2A),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
+                    ) {
+                        Text(
+                            "Abbrechen",
+                            color = Color(0xFFE8EEFC), fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
 // ---------- Einstellungen ----------
 
 @Composable
-fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
+fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -> Unit = {}) {
     val appCtx = androidx.compose.ui.platform.LocalContext.current
     var playerId by remember { mutableStateOf("Lade…") }
     var pairingPw by remember { mutableStateOf<String?>(null) }
@@ -436,6 +673,10 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
     var supportText by remember { mutableStateOf("") }
     var supportState by remember { mutableStateOf<String?>(null) }  // null=Formular, sonst Meldung
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    // Aktives Profil für die Anzeige
+    var activeProfile by remember { mutableStateOf<Profile?>(null) }
+    LaunchedEffect(Unit) { activeProfile = ProfileStore.active(appCtx) }
 
     // Generierte Player-ID + Pairing-Passwort (Geraet-generiert, IBPlayer-Modell)
     LaunchedEffect(Unit) {
@@ -474,6 +715,15 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                 TextButton(onClick = onClose) { Text("← Zurück", color = Color(0xFF8FA3C8), fontSize = 16.sp) }
             }
             Spacer(Modifier.height(28.dp))
+
+            // ---- Profile ----
+            Section("Profile") {
+                InfoRow("Aktives Profil", activeProfile?.name ?: "—")
+                TextButton(onClick = onSwitchProfile, modifier = Modifier.align(Alignment.Start)) {
+                    Text("Profil wechseln", color = Color(0xFFFFC94D), fontSize = 14.sp)
+                }
+            }
+            Spacer(Modifier.height(18.dp))
 
             // ---- Mein Player (Pairing) ----
             Section("Mein Player") {
