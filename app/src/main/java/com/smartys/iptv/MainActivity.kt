@@ -9,6 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -962,19 +964,25 @@ fun ChannelGrid(
     onOpenSettings: () -> Unit,
     onOpenEpg: () -> Unit = {}
 ) {
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
     var favMode by remember { mutableStateOf(false) }
+    // Sortier-Modus + Kanal-Langdruck-Menü + FSK18-PIN-Sperre
+    var sortMode by remember { mutableStateOf(ChannelPrefs.sortMode(appCtx)) }
+    var channelMenuFor by remember { mutableStateOf<LiveStream?>(null) }
+    var lockPinFor by remember { mutableStateOf<LiveStream?>(null) }
+    var playGateFor by remember { mutableStateOf<LiveStream?>(null) }  // FSK18: PIN vor Abspielen
     val catListState = rememberLazyListState()
     val firstRowFocus = remember { FocusRequester() }
     val searchFieldFocus = remember { FocusRequester() }
     // Tick: +1 bei jedem Klick auf eine Kategorie => Fokus auf 1. Kanal lenken
     var focusListTick by remember { mutableStateOf(0) }
 
-    val shown = remember(channels, searchQuery, selectedCategory, favMode, vm.favorites) {
+    val shown = remember(channels, searchQuery, selectedCategory, favMode, vm.favorites, sortMode) {
         var list = channels
         if (favMode) list = list.filter { it.streamId in vm.favorites }
         if (selectedCategory != null) list = list.filter { it.categoryId == selectedCategory }
         if (searchQuery.isNotBlank()) list = list.filter { it.name.contains(searchQuery, true) }
-        list.sortedBy { it.num ?: 0 }
+        ChannelPrefs.apply(appCtx, list)
     }
 
     // Nach Kategorie-Klick: Fokus sofort auf den OBERSTEN Kanal (nicht "in der Luft")
@@ -1035,10 +1043,6 @@ fun ChannelGrid(
                         if (favMode) "Favoriten" else categories.firstOrNull { it.id == selectedCategory }?.name ?: "Alle Kanäle",
                         color = Color(0xFFE8EEFC), fontSize = 24.sp, fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        "${shown.size} Kanäle · sortiert nach Nummer",
-                        color = Color(0xFF6B7A99), fontSize = 12.sp
-                    )
                 }
 
                 if (searchArmed) {
@@ -1086,6 +1090,29 @@ fun ChannelGrid(
                     }
                 }
                 Spacer(Modifier.width(14.dp))
+                // Sortier-Button (Nummer / Name / Manuell)
+                Surface(
+                    onClick = {
+                        val modes = listOf("num", "name", "manual")
+                        val next = modes[(modes.indexOf(sortMode) + 1) % modes.size]
+                        sortMode = next
+                        ChannelPrefs.setSortMode(appCtx, next)
+                    },
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = Color(0xFF11172A),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF232C42))
+                ) {
+                    Text(
+                        when (sortMode) {
+                            "name" -> "A–Z"
+                            "manual" -> "⇅ Manuell"
+                            else -> "1–9"
+                        },
+                        color = Color(0xFFE8EEFC), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
                 TextButton(onClick = onOpenEpg) {
                     Text("📅", fontSize = 22.sp, color = Color(0xFF8FA3C8))
                 }
@@ -1117,14 +1144,155 @@ fun ChannelGrid(
                     ChannelRow(
                         channel = ch,
                         isFav = ch.streamId in vm.favorites,
-                        onPlay = { onPlay(ch) },
+                        onPlay = {
+                            if (ChannelPrefs.isLocked(appCtx, ch.streamId)) playGateFor = ch
+                            else onPlay(ch)
+                        },
                         onToggleFav = { vm.toggleFavorite(ch.streamId) },
                         vm = vm,
+                        onLongPress = { channelMenuFor = ch },
                         focusOnAppear = if (shown.indexOfFirst { it.streamId == ch.streamId } == 0) firstRowFocus else null
                     )
                 }
             }
         }
+    }
+
+    // ---- Kanal-Langdruck-Menü: verschieben / ausblenden / FSK18-Sperre ----
+    channelMenuFor?.let { ch ->
+        val idx = shown.indexOfFirst { it.streamId == ch.streamId }
+        val isHidden = ChannelPrefs.isHidden(appCtx, ch.streamId)
+        val isLocked = ChannelPrefs.isLocked(appCtx, ch.streamId)
+        AlertDialog(
+            onDismissRequest = { channelMenuFor = null },
+            title = { Text(ch.name, color = Color(0xFFE8EEFC), fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            text = {
+                Column(horizontalAlignment = Alignment.Start) {
+                    Text("Kanal verwalten", color = Color(0xFF6B7A99), fontSize = 13.sp)
+                    Spacer(Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Surface(
+                            onClick = { ChannelPrefs.move(appCtx, shown, ch.streamId, -1); channelMenuFor = null },
+                            enabled = idx > 0,
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF141A2A),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
+                        ) {
+                            Text("▲ Nach oben", color = Color(0xFFE8EEFC), fontSize = 14.sp,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                        }
+                        Surface(
+                            onClick = { ChannelPrefs.move(appCtx, shown, ch.streamId, +1); channelMenuFor = null },
+                            enabled = idx < shown.size - 1,
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF141A2A),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
+                        ) {
+                            Text("▼ Nach unten", color = Color(0xFFE8EEFC), fontSize = 14.sp,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        onClick = {
+                            if (isHidden) ChannelPrefs.unhide(appCtx, ch.streamId)
+                            else ChannelPrefs.hide(appCtx, ch.streamId)
+                            channelMenuFor = null
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF141A2A),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
+                    ) {
+                        Text(if (isHidden) "👁 Wieder einblenden" else "🚫 Ausblenden",
+                            color = if (isHidden) Color(0xFF6FCF9F) else Color(0xFFFF9B9B), fontSize = 14.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Surface(
+                        onClick = { lockPinFor = ch; channelMenuFor = null },
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF141A2A),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
+                    ) {
+                        Text(if (isLocked) "🔓 FSK18-Sperre aufheben" else "🔒 FSK18 sperren",
+                            color = if (isLocked) Color(0xFF6FCF9F) else Color(0xFFFFC94D), fontSize = 14.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { channelMenuFor = null }) { Text("Schließen", color = Color(0xFF6B7A99)) } },
+            containerColor = Color(0xFF10141F)
+        )
+    }
+
+    // ---- FSK18-PIN-Abfrage: Kanal abspielen nur nach PIN ----
+    lockPinFor?.let { ch ->
+        val locked = ChannelPrefs.isLocked(appCtx, ch.streamId)
+        var pin by remember { mutableStateOf("") }
+        var err by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { lockPinFor = null },
+            title = { Text(if (locked) "FSK18-Sperre aufheben" else "FSK18 sperren", color = Color(0xFFE8EEFC), fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("PIN eingeben:", color = Color(0xFF8FA3C8), fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pin, onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) pin = it },
+                        label = { Text("PIN") }, singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFFFC94D),
+                            unfocusedBorderColor = Color(0xFF232C42)
+                        )
+                    )
+                    if (err) Text("Falsche PIN", color = Color(0xFFFF6B6B), fontSize = 13.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (ParentalControl.verify(appCtx, pin)) {
+                        ChannelPrefs.setLocked(appCtx, ch.streamId, !locked)
+                        lockPinFor = null
+                    } else { err = true; pin = "" }
+                }) { Text("OK", color = Color(0xFFFFC94D), fontSize = 15.sp) }
+            },
+            dismissButton = { TextButton(onClick = { lockPinFor = null }) { Text("Abbrechen", color = Color(0xFF6B7A99)) } },
+            containerColor = Color(0xFF10141F)
+        )
+    }
+
+    // ---- FSK18-PIN vor dem Abspielen ----
+    playGateFor?.let { ch ->
+        var pin by remember { mutableStateOf("") }
+        var err by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { playGateFor = null },
+            title = { Text("🔒 FSK18", color = Color(0xFFE8EEFC), fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Dieser Kanal ist gesperrt. PIN eingeben:", color = Color(0xFF8FA3C8), fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pin, onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) pin = it },
+                        label = { Text("PIN") }, singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFFFC94D),
+                            unfocusedBorderColor = Color(0xFF232C42)
+                        )
+                    )
+                    if (err) Text("Falsche PIN", color = Color(0xFFFF6B6B), fontSize = 13.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (ParentalControl.verify(appCtx, pin)) { playGateFor = null; onPlay(ch) }
+                    else { err = true; pin = "" }
+                }) { Text("Abspielen", color = Color(0xFFFFC94D), fontSize = 15.sp) }
+            },
+            dismissButton = { TextButton(onClick = { playGateFor = null }) { Text("Abbrechen", color = Color(0xFF6B7A99)) } },
+            containerColor = Color(0xFF10141F)
+        )
     }
 }
 
@@ -1170,6 +1338,7 @@ fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit, focusRequ
 
 // ---------- Kanal-Zeile ----------
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChannelRow(
     channel: LiveStream,
@@ -1177,6 +1346,7 @@ fun ChannelRow(
     onPlay: () -> Unit,
     onToggleFav: () -> Unit,
     vm: MainViewModel,
+    onLongPress: () -> Unit = {},
     focusOnAppear: FocusRequester? = null
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -1206,7 +1376,7 @@ fun ChannelRow(
             .padding(vertical = 3.dp)
             .then(if (focusOnAppear != null) Modifier.focusRequester(focusOnAppear) else Modifier)
             .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onPlay)
+            .combinedClickable(onClick = onPlay, onLongClick = onLongPress)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
             // Kanalnummer (002-Stil: rechtsbündig, gedämpft)
