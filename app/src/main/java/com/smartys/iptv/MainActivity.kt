@@ -419,6 +419,11 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
                                     onBack = { mainTab = "live" },
                                     onOpenSettings = { showSettings = true }
                                 )
+                                "downloads" -> DownloadsScreen(
+                                    appCtx = appCtx,
+                                    onPlay = playVod,
+                                    onBack = { mainTab = "live" }
+                                )
                                 else -> ChannelGrid(
                                     vm = vm,
                                     categories = s.categories,
@@ -461,7 +466,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
 
 @Composable
 fun MainTabs(current: String, onChange: (String) -> Unit) {
-    val tabs = listOf("live" to "Live-TV", "movies" to "Filme", "series" to "Serien")
+    val tabs = listOf("live" to "Live-TV", "movies" to "Filme", "series" to "Serien", "downloads" to "Downloads")
     Row(
         Modifier.fillMaxWidth().background(Color(0xFF0B0E14)).padding(horizontal = 32.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)

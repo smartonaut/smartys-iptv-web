@@ -807,3 +807,111 @@ fun CategoryMenuDialog(scope: String, cat: Category, cats: List<Category>, onDis
         containerColor = Color(0xFF10141F)
     )
 }
+
+// ---------- Downloads-Übersicht (offline verfügbare VOD-Titel) ----------
+
+@Composable
+fun DownloadsScreen(
+    appCtx: android.content.Context,
+    onPlay: (VodPlayback) -> Unit,
+    onBack: () -> Unit
+) {
+    val ctx = appCtx
+    // Reaktiv auf die Downloader-Liste reagieren (Compose-State).
+    val items = VodDownloader.items
+    val finished = items.filter { it.status == "complete" }
+    var deleteConfirmFor by remember { mutableStateOf<DownloadItem?>(null) }
+
+    Column(Modifier.fillMaxSize()) {
+        // Kopfzeile
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 20.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Downloads", color = Color(0xFFE8EEFC), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    if (finished.isEmpty()) "Keine offline verfügbaren Titel"
+                    else "${finished.size} offline verfügbar",
+                    color = Color(0xFF6B7A99), fontSize = 12.sp
+                )
+            }
+            TextButton(onClick = onBack) { Text("← Zurück", color = Color(0xFF8FA3C8), fontSize = 16.sp) }
+        }
+
+        if (finished.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("📥", fontSize = 44.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Noch keine Downloads", color = Color(0xFFE8EEFC), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "In der Filmdetailseite „⬇ Herunterladen“ wählen,\num einen Film offline verfügbar zu machen.",
+                        color = Color(0xFF6B7A99), fontSize = 14.sp, textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 32.dp, vertical = 8.dp)
+            ) {
+                items(finished, key = { it.id }) { d ->
+                    val file = VodDownloader.localFile(ctx, d.id)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(d.title, color = Color(0xFFE8EEFC), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                "✓ offline · ${d.downloadedBytes / 1024 / 1024} MB",
+                                color = Color(0xFF6FCF9F), fontSize = 12.sp
+                            )
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        // Abspielen (nur wenn Datei wirklich da)
+                        Surface(
+                            onClick = {
+                                if (file != null) {
+                                    onPlay(VodPlayback(file.toURI().toString(), d.title, key = "vod:download:${d.id}", startPosMs = 0L))
+                                }
+                            },
+                            enabled = file != null,
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF141A2A),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
+                        ) {
+                            Text("▶ Abspielen", color = Color(0xFFFFC94D), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        TextButton(onClick = { deleteConfirmFor = d }) {
+                            Text("🗑 Löschen", color = Color(0xFFFF6B6B), fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Lösch-Bestätigung
+    deleteConfirmFor?.let { d ->
+        AlertDialog(
+            onDismissRequest = { deleteConfirmFor = null },
+            title = { Text("Download löschen?", color = Color(0xFFE8EEFC), fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+            text = { Text("„${d.title}“ (${d.downloadedBytes / 1024 / 1024} MB) wird vom Gerät entfernt.", color = Color(0xFF8FA3C8), fontSize = 14.sp) },
+            confirmButton = {
+                TextButton(onClick = { VodDownloader.delete(ctx, d.id); deleteConfirmFor = null }) {
+                    Text("Löschen", color = Color(0xFFFF6B6B), fontSize = 15.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteConfirmFor = null }) { Text("Abbrechen", color = Color(0xFF6B7A99), fontSize = 15.sp) }
+            },
+            containerColor = Color(0xFF10141F)
+        )
+    }
+}
