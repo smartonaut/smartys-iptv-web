@@ -1104,9 +1104,9 @@ fun ChannelGrid(
                 ) {
                     Text(
                         when (sortMode) {
-                            "name" -> "A–Z"
-                            "manual" -> "⇅ Manuell"
-                            else -> "1–9"
+                            "name" -> "Sortieren: A–Z"
+                            "manual" -> "Sortieren: Manuell"
+                            else -> "Sortieren: Nummer"
                         },
                         color = Color(0xFFE8EEFC), fontSize = 14.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
