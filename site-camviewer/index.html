@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Smartys CamViewer — alle Werkstatt-Kameras in einer sauberen deutschen Android-App. MultiView, SingleView mit PTZ-Steuerung, UniFi + Hikvision + Reolink + Xiongmai über RTSP/ONVIF.">
+<title>Smartys CamViewer — Kamera-App ohne Ballast</title>
+<link rel="canonical" href="https://camviewer.smartys.tech/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Smartys">
+<meta property="og:title" content="Smartys CamViewer — Kamera-App ohne Ballast">
+<meta property="og:description" content="MultiView-Übersicht, SingleView mit PTZ, alle gängigen Kameras in einer App. Saubere deutsche Oberfläche.">
+<meta property="og:url" content="https://camviewer.smartys.tech/">
+<meta property="og:image" content="https://camviewer.smartys.tech/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Smartys CamViewer — Kamera-App ohne Ballast">
+<meta name="twitter:description" content="MultiView, SingleView mit PTZ, alle gängigen Kameras in einer App.">
+<meta name="twitter:image" content="https://camviewer.smartys.tech/logo.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#070a12; --panel:rgba(255,255,255,.04); --border:rgba(255,255,255,.08);
+    --text:#f2f5ff; --muted:#9aa7c4; --dim:#6b7896;
+    --gold:#ffc94d; --cyan:#22d3ee; --blue:#3b82f6; --green:#4ade80;
+  }
+  body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .wrap { max-width:1140px; margin:0 auto; padding:0 24px; }
+
+  nav { position:sticky; top:0; z-index:20; background:rgba(7,10,18,.7); backdrop-filter:blur(20px) saturate(180%); border-bottom:1px solid var(--border); }
+  nav .wrap { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; }
+  .logo { font-size:19px; font-weight:800; letter-spacing:-.3px; }
+  .logo .dot { color:var(--gold); }
+  .logo .glow { background:linear-gradient(90deg,var(--gold),var(--cyan)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .logo .home { color:var(--dim); font-size:13px; text-decoration:none; margin-left:14px; font-weight:500; }
+  .btn { display:inline-block; padding:11px 22px; border-radius:12px; font-weight:600; font-size:14.5px; text-decoration:none; border:none; cursor:pointer; transition:transform .15s, box-shadow .2s; }
+  .btn:hover { transform:translateY(-2px); }
+  .btn.gold { background:linear-gradient(135deg,var(--gold),#ffb347); color:#1a1200; box-shadow:0 6px 24px rgba(255,201,77,.35); }
+  .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  .btn.ghost:hover { border-color:rgba(255,255,255,.25); background:rgba(255,255,255,.1); }
+
+  .hero { position:relative; padding:100px 0 70px; overflow:hidden; }
+  .hero::before { content:""; position:absolute; inset:0; pointer-events:none;
+    background:
+      radial-gradient(600px 400px at 15% 10%, rgba(59,130,246,.28), transparent 60%),
+      radial-gradient(700px 500px at 85% 20%, rgba(34,211,238,.20), transparent 60%),
+      radial-gradient(500px 400px at 50% 90%, rgba(74,222,128,.14), transparent 60%); }
+  .hero .wrap { position:relative; z-index:1; display:grid; grid-template-columns:1.1fr .9fr; gap:48px; align-items:center; }
+  .pill { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--muted);
+    background:rgba(255,255,255,.05); border:1px solid var(--border); border-radius:99px; padding:7px 16px; margin-bottom:24px; }
+  .pill .dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 12px var(--green); }
+  .hero h1 { font-size:clamp(36px,5vw,60px); font-weight:900; letter-spacing:-2.5px; line-height:1.04; }
+  .hero h1 .grad { background:linear-gradient(90deg,var(--gold),var(--cyan)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero p.sub { font-size:19px; color:var(--muted); max-width:560px; margin:24px 0 34px; }
+  .cta-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  .note { font-size:13px; color:var(--dim); margin-top:14px; }
+
+  .phone { position:relative; width:260px; height:540px; margin:0 auto; border-radius:34px; background:#0b0f1c;
+    border:1px solid var(--border); box-shadow:0 40px 100px rgba(0,0,0,.65); overflow:hidden; padding:10px; }
+  .phone img { width:100%; height:100%; object-fit:cover; object-position:top; border-radius:24px; display:block; }
+
+  section { padding:80px 0; position:relative; }
+  section.alt { background:rgba(255,255,255,.02); border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+  h2 { font-size:clamp(26px,4vw,40px); font-weight:800; letter-spacing:-1px; margin-bottom:14px; }
+  .lead { color:var(--muted); font-size:17px; max-width:620px; margin-bottom:44px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:20px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:18px; padding:28px; transition:transform .2s, border-color .2s; }
+  .card:hover { transform:translateY(-4px); border-color:rgba(255,255,255,.2); }
+  .card .ico { font-size:34px; margin-bottom:16px; display:inline-block; }
+  .card h3 { font-size:18px; margin-bottom:8px; }
+  .card p { color:var(--muted); font-size:14.5px; }
+
+  .shotrow { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:24px; }
+  .shot { text-align:center; }
+  .shot .frame { width:200px; height:410px; margin:0 auto 16px; border-radius:28px; background:#0b0f1c;
+    border:1px solid var(--border); box-shadow:0 30px 80px rgba(0,0,0,.55); overflow:hidden; padding:8px; }
+  .shot .frame img { width:100%; height:100%; object-fit:cover; object-position:top; border-radius:20px; display:block; }
+  .shot p { color:var(--dim); font-size:13.5px; }
+
+  .brands { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; }
+  .brand { padding:10px 20px; border-radius:99px; border:1px solid var(--border); color:var(--muted); font-size:14px; font-weight:600; }
+
+  footer { padding:40px 0 60px; color:var(--dim); font-size:13px; border-top:1px solid var(--border); }
+  footer .wrap { display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+  footer a { color:var(--muted); text-decoration:none; margin-left:16px; }
+
+  @media (max-width:860px) {
+    .hero .wrap { grid-template-columns:1fr; }
+    .phone { width:230px; height:480px; }
+  }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Smartys CamViewer",
+  "operatingSystem": "Android",
+  "applicationCategory": "UtilitiesApplication",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+  "description": "Alle Werkstatt-Kameras in einer sauberen deutschen Android-App: MultiView-Übersicht, SingleView mit PTZ-Steuerung, Unterstützung für UniFi, Hikvision, Reolink, Xiongmai und mehr über RTSP/ONVIF."
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo">Smartys<span class="dot">·</span><span class="glow">CamViewer</span><a class="home" href="https://smartys.tech">← smartys.tech</a></div>
+  <div class="links">
+    <a class="btn ghost" href="#features">Features</a>
+    <a class="btn gold" href="mailto:kontakt@smartys.tech?subject=Smartys%20CamViewer">Kontakt</a>
+  </div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div>
+    <span class="pill"><span class="dot"></span> Android · in Erprobung</span>
+    <h1>Alle Kameras.<br><span class="grad">Eine App.</span></h1>
+    <p class="sub">Der schlanke Kamera-Viewer für die Werkstatt: Live-Übersicht aller Kameras, Einzelansicht mit PTZ-Steuerung — und eine Oberfläche, die man versteht. Ohne das Wirrwarr der Hersteller-Apps.</p>
+    <div class="cta-row">
+      <a class="btn gold" href="mailto:kontakt@smartys.tech?subject=Smartys%20CamViewer%20Beta">Beta-Zugang anfragen</a>
+      <a class="btn ghost" href="#features">Mehr erfahren</a>
+    </div>
+    <p class="note">Download folgt nach Abschluss der Testphase. Für Fragen: kontakt@smartys.tech</p>
+  </div>
+  <div class="phone"><img src="screen-single.png" alt="Smartys CamViewer SingleView mit PTZ-Steuerung"></div>
+</div></header>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Alles drin, was du brauchst</h2>
+    <p class="lead">Gebaut für den Alltag in der Werkstatt — nicht fürs Datenblatt.</p>
+    <div class="grid">
+      <div class="card"><span class="ico">🖥️</span><h3>MultiView</h3><p>Alle Kameras gleichzeitig im Blick — als sauberes Raster auf einen Schlag, ohne zwischen Apps wechseln zu müssen.</p></div>
+      <div class="card"><span class="ico">🎥</span><h3>SingleView</h3><p>Antippen, und die Kamera öffnet sich im Vollbild. Zurück mit einem Klick.</p></div>
+      <div class="card"><span class="ico">🎮</span><h3>PTZ-Steuerung</h3><p>Schwenken, Neigen, Zoom direkt in der App — per Steuerkreuz oder gespeicherten Festpositionen. Ein- und ausblendbar.</p></div>
+      <div class="card"><span class="ico">📷</span><h3>Alle Kameras</h3><p>UniFi Protect, Hikvision, Reolink, Xiongmai und viele mehr — über RTSP oder ONVIF. Gemischt, in einer App.</p></div>
+      <div class="card"><span class="ico">🔌</span><h3>Eigene Kameras</h3><p>Kameras selbst anlegen, benennen und sortieren. Gespeichert direkt auf deinem Gerät.</p></div>
+      <div class="card"><span class="ico">🇩🇪</span><h3>Deutsche Oberfläche</h3><p>Klare Begriffe, keine verschachtelten Menüs. Versteht man sofort — auch ohne Handbuch.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>So sieht es aus</h2>
+    <p class="lead">Live-Bilder aus der Werkstatt — links die Übersicht, rechts die Einzelansicht mit PTZ.</p>
+    <div class="shotrow">
+      <div class="shot"><div class="frame"><img src="screen-grid.png" alt="Smartys CamViewer MultiView-Übersicht mit Live-Kameras"></div><p>MultiView — alle Kameras im Raster</p></div>
+      <div class="shot"><div class="frame"><img src="screen-single.png" alt="Smartys CamViewer Einzelansicht mit PTZ-Steuerung"></div><p>SingleView — Vollbild mit PTZ-Steuerung</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Kompatibel mit</h2>
+    <p class="lead">Die gängigen Kameras deiner Werkstatt — zusammengeführt statt getrennt.</p>
+    <div class="brands">
+      <span class="brand">UniFi Protect</span>
+      <span class="brand">Hikvision</span>
+      <span class="brand">Reolink</span>
+      <span class="brand">Xiongmai</span>
+      <span class="brand">Dahua</span>
+      <span class="brand">RTSP / ONVIF</span>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>Bereit für deine Werkstatt?</h2>
+    <p class="lead">Die App ist aktuell in der Erprobungsphase. Melde dich, wenn du sie testen oder ein Wunsch-Feature einbringen möchtest.</p>
+    <div class="cta-row">
+      <a class="btn gold" href="mailto:kontakt@smartys.tech?subject=Smartys%20CamViewer%20Beta">Beta-Zugang anfragen</a>
+      <a class="btn ghost" href="https://smartys.tech">Weitere Apps von Smartys</a>
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <div>© 2026 Smartys — camviewer.smartys.tech</div>
+  <div>
+    <a href="/impressum.html">Impressum</a>
+    <a href="/datenschutz.html">Datenschutz</a>
+    <a href="/agb.html">AGB</a>
+  </div>
+</div></footer>
+
+</body>
+</html>
