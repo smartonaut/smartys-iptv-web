@@ -31,6 +31,12 @@
 
   nav { position:sticky; top:0; z-index:20; background:rgba(8,11,20,.82); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); }
   nav .wrap { display:flex; justify-content:space-between; align-items:center; padding:18px 24px; }
+  nav .links { display:flex; gap:8px; align-items:center; }
+  .btn { display:inline-block; padding:11px 22px; border-radius:12px; font-weight:600; font-size:14.5px; text-decoration:none; border:none; cursor:pointer; transition:transform .15s, box-shadow .2s; }
+  .btn:hover { transform:translateY(-2px); }
+  .btn.gold { background:linear-gradient(135deg,var(--gold),#ffb347); color:#1a1200; box-shadow:0 6px 24px rgba(255,201,77,.35); }
+  .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  .btn.ghost:hover { border-color:rgba(255,255,255,.25); background:rgba(255,255,255,.1); }
   .logo { font-size:20px; font-weight:800; letter-spacing:-.4px; }
   .logo .dot { color:var(--gold); }
   .logo .tech { background:linear-gradient(90deg,var(--gold),#f472b6,#8b5cf6,#22d3ee); -webkit-background-clip:text; background-clip:text; color:transparent; }
@@ -85,6 +91,9 @@
 
 <nav><div class="wrap">
   <div class="logo">Smartys<span class="dot">.</span><span class="tech">Tech</span></div>
+  <div class="links">
+    <a class="btn ghost" href="https://forum.smartys.tech">Community</a>
+  </div>
 </div></nav>
 
 <header class="hero"><div class="wrap">
