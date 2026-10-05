@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Smartys Downloader — der schlanke Download-Manager. Container- und Hoster-Links reinkopieren, Debrid-Dienste lösen 634 Hoster auf, Filme landen automatisch entpackt im Media-Server.">
-<title>Smartys Downloader — Der schlanke Download-Manager</title>
+<meta name="description" content="Smartys Downloader — der schlanke Download-Beschleuniger und -Manager. Segmentierte Downloads, Resume, Torrent, Zeitplan. Für Windows, Ubuntu und Debian.">
+<title>Smartys Downloader — Der schlanke Download-Beschleuniger</title>
 <link rel="canonical" href="https://downloader.smartys.tech/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Smartys">
-<meta property="og:title" content="Smartys Downloader — Der schlanke Download-Manager">
-<meta property="og:description" content="Container- und Hoster-Links reinkopieren, fertig. Debrid-Dienste lösen 634 Hoster auf, Filme landen automatisch entpackt im Media-Server.">
+<meta property="og:title" content="Smartys Downloader — Der schlanke Download-Beschleuniger">
+<meta property="og:description" content="Segmentierte Downloads, Resume, Torrent, Zeitplan. Für Windows, Ubuntu und Debian — schlank, schnell, ohne JVM.">
 <meta property="og:url" content="https://downloader.smartys.tech/">
 <meta property="og:image" content="https://downloader.smartys.tech/logo.png">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Smartys Downloader — Der schlanke Download-Manager">
-<meta name="twitter:description" content="Container- und Hoster-Links reinkopieren, fertig. Debrid-Dienste lösen 634 Hoster auf.">
+<meta name="twitter:title" content="Smartys Downloader — Der schlanke Download-Beschleuniger">
+<meta name="twitter:description" content="Segmentierte Downloads, Resume, Torrent, Zeitplan. Für Windows, Ubuntu und Debian.">
 <meta name="twitter:image" content="https://downloader.smartys.tech/logo.png">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -98,9 +98,10 @@
   .step .n { position:absolute; top:-16px; left:24px; width:36px; height:36px; border-radius:12px;
     background:linear-gradient(135deg,var(--cyan),var(--green)); color:#04120c; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:15px; box-shadow:0 6px 16px rgba(34,211,238,.3); }
 
-  .dlwrap { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:22px; align-items:stretch; }
+  .dlwrap { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:22px; align-items:stretch; }
   .dlcard { background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:32px; position:relative; display:flex; flex-direction:column; }
-  .dlcard .ico { font-size:40px; margin-bottom:14px; display:inline-block; }
+  .dlcard .os { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .dlcard .os svg { flex-shrink:0; }
   .dlcard h3 { font-size:20px; }
   .dlcard p { color:var(--muted); font-size:14.5px; margin:10px 0 22px; flex:1; }
   .dlcard .meta { color:var(--dim); font-size:13px; margin-top:14px; }
@@ -114,10 +115,10 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Smartys Downloader",
-  "operatingSystem": "Windows, Linux",
+  "operatingSystem": "Windows, Ubuntu, Debian",
   "applicationCategory": "UtilitiesApplication",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
-  "description": "Schlanker Download-Manager: Container- und Hoster-Links reinkopieren, Debrid-Dienste lösen 634 Hoster auf, Filme landen automatisch entpackt im Media-Server."
+  "description": "Schlanker Download-Beschleuniger und -Manager: segmentierte Downloads, Resume, Torrent, Zeitplan. Für Windows, Ubuntu und Debian."
 }
 </script>
 </head>
@@ -134,18 +135,18 @@
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <div class="pill"><span class="live"></span> Beta 0.2.0 — Windows &amp; Linux</div>
-  <h1>Links rein, <span class="grad">fertig.</span></h1>
-  <p class="sub">Der schlanke Download-Manager: Container- und Hoster-Links einfach reinkopieren — Debrid-Dienste lösen 634 Hoster auf, Filme landen automatisch entpackt im Media-Server.</p>
+  <div class="pill"><span class="live"></span> Beta 0.2.0 — Windows, Ubuntu &amp; Debian</div>
+  <h1>Schneller <span class="grad">herunterladen.</span></h1>
+  <p class="sub">Der schlanke Download-Beschleuniger und -Manager: segmentierte Downloads, Resume, Torrent und Zeitplan — ohne JVM-Ballast, dafür mit voller Kontrolle.</p>
   <div class="cta-row">
-    <a class="btn gold" href="/download/downloader_win">Windows (.zip) herunterladen</a>
-    <a class="btn ghost" href="/download/downloader_linux">Linux (.deb) herunterladen</a>
+    <a class="btn gold" href="#download">Herunterladen</a>
+    <a class="btn ghost" href="#features">Features ansehen</a>
   </div>
   <p class="note">Beta-Version 0.2.0 · Verschlüsselte Download-Links · Download wird anonym gezählt</p>
   <div class="stats">
-    <div class="stat"><b>634</b><span>Hoster via Debrid</span></div>
-    <div class="stat"><b>8</b><span>Debrid-Dienste</span></div>
+    <div class="stat"><b>8×</b><span>Segmente parallel</span></div>
     <div class="stat"><b>&lt;50 MB</b><span>Footprint</span></div>
+    <div class="stat"><b>3</b><span>Betriebssysteme</span></div>
     <div class="stat"><b>0 €</b><span>Kostenlos</span></div>
   </div>
 
@@ -157,13 +158,13 @@
     <div class="content">
       <div class="side">
         <div class="sel">Downloads</div>
-        <div>Accounts</div>
+        <div>Zeitplan</div>
         <div>Einstellungen</div>
       </div>
       <div class="list">
-        <div class="rowitem"><span class="chip">FILME</span><div class="dlname">One.Last.Shot.2026.German.1080p</div><div class="dlbar"><i></i></div><div class="dlstate">7,4 GB · entpackt ✓</div></div>
-        <div class="rowitem focus"><span class="chip">SERIEN</span><div class="dlname">Soulm8te.S01E01.German.1080p</div><div class="dlbar"><i style="width:42%"></i></div><div class="dlstate">2,1 GB · lädt</div></div>
-        <div class="rowitem"><span class="chip">MUSIK</span><div class="dlname">Album.2026.FLAC</div><div class="dlbar"><i style="width:100%"></i></div><div class="dlstate">410 MB · fertig ✓</div></div>
+        <div class="rowitem"><span class="chip">DATEI</span><div class="dlname">ubuntu-24.04-desktop.iso</div><div class="dlbar"><i style="width:78%"></i></div><div class="dlstate">4,1 GB · lädt · 8 Segmente</div></div>
+        <div class="rowitem focus"><span class="chip">TORRENT</span><div class="dlname">debian-12.10.0-amd64.iso</div><div class="dlbar"><i style="width:42%"></i></div><div class="dlstate">3,2 GB · lädt</div></div>
+        <div class="rowitem"><span class="chip">DATEI</span><div class="dlname">treiber-paket.zip</div><div class="dlbar"><i style="width:100%"></i></div><div class="dlstate">210 MB · fertig ✓</div></div>
       </div>
     </div>
   </div>
@@ -171,49 +172,62 @@
 
 <section id="features"><div class="wrap">
   <h2>Alles drin, nichts dahinter.</h2>
-  <p class="lead">Der Download-Manager, der seine Arbeit macht — ohne JVM-Ballast.</p>
+  <p class="lead">Der Download-Manager, der seine Arbeit macht — und deine Bandbreite voll nutzt.</p>
   <div class="grid">
-    <div class="card"><span class="ico">🧲</span><h3>Container &amp; Hoster</h3><p>DLC-, CNL2- und Hoster-Links einfach reinkopieren — Filecrypt, hide.cx und data-load.me werden nativ aufgelöst.</p></div>
-    <div class="card"><span class="ico">⚡</span><h3>Debrid-Router</h3><p>8 Debrid-Dienste (Real-Debrid, DebridLink, AllDebrid, Premiumize, TorBox, EasyDebrid, LinkSnappy, Offcloud) lösen 634 Hoster auf — mit automatischem Fallback.</p></div>
-    <div class="card"><span class="ico">🧩</span><h3>Filecrypt nativ</h3><p>Cloudflare-Challenge und PoW-Captcha werden im echten Browser gelöst — kein Plugin-Friedhof, kein Captcha-Stau.</p></div>
-    <div class="card"><span class="ico">📦</span><h3>Automatisch entpacken</h3><p>Multipart-RAR wird erst entschlüsselt, wenn alle Teile da sind — die größte Videodatei wandert per rsync zum Media-Server, Archive löschen sich selbst.</p></div>
-    <div class="card"><span class="ico">🗂️</span><h3>Kategorien &amp; Ziele</h3><p>Filme, Serien, Software, Musik, Hörspiel, Kinder, Sonstiges — jede Kategorie hat ihr eigenes Ziel (Jellyfin, Audiobookshelf …).</p></div>
-    <div class="card"><span class="ico">🖥️</span><h3>Web-Panel</h3><p>Dunkles Dashboard mit Live-Fortschritt, Pause/Resume, Speed und Account-Verwaltung — überall erreichbar.</p></div>
-    <div class="card"><span class="ico">📋</span><h3>Clipboard-Watcher</h3><p>Links kopieren genügt — der Downloader schlägt das Paket automatisch vor. Event-getrieben, kein ständiges Abfragen.</p></div>
-    <div class="card"><span class="ico">🔌</span><h3>Click'n'Load-Bridge</h3><p>Browser-Extension fängt CNL2-Popups ab und übergibt sie direkt an den Downloader — DLC-Entschlüsselung lokal.</p></div>
-    <div class="card"><span class="ico">🔐</span><h3>Verschlüsselt</h3><p>Login mit Passwort-Regeln, 2FA (TOTP) und API-Keys Fernet-verschlüsselt in der lokalen Datenbank — nie im Klartext.</p></div>
-    <div class="card"><span class="ico">🧾</span><h3>Passwort-Liste</h3><p>Container- und Archiv-Passwörter werden automatisch durchgetestet — kein manuelles Nachschlagen.</p></div>
-    <div class="card"><span class="ico">🔄</span><h3>Resume &amp; Retry</h3><p>Chunked Downloads mit Resume über .part, Speed-Limit und automatischem Retry — Abbruch ist kein Neustart.</p></div>
-    <div class="card"><span class="ico">🚀</span><h3>Direct-Hoster-Fallback</h3><p>Hoster ohne Debrid-Support (filejoker, webshare.cz, krakenfiles, f2h.to) laufen über eigene Plugins.</p></div>
+    <div class="card"><span class="ico">⚡</span><h3>Multi-Segment-Beschleunigung</h3><p>Dateien werden in mehrere Teile geteilt und parallel geladen — so holst du aus deiner Leitung das Maximum heraus.</p></div>
+    <div class="card"><span class="ico">🔄</span><h3>Resume &amp; Fortsetzen</h3><p>Verbindung weg? Kein Problem. Unterbrochene Downloads werden exakt an der Abbruchstelle fortgesetzt — nicht von vorn.</p></div>
+    <div class="card"><span class="ico">🧲</span><h3>Torrent &amp; Magnet-Links</h3><p>Integrierter BitTorrent-Client mit Prioritätskontrolle und Bandbreitenverwaltung — .torrent-Dateien und Magnet-Links direkt.</p></div>
+    <div class="card"><span class="ico">⏰</span><h3>Zeitplan</h3><p>Downloads zu festen Zeiten starten, pausieren und priorisieren — der Downloader arbeitet, wann du willst.</p></div>
+    <div class="card"><span class="ico">🪞</span><h3>Multi-Mirror</h3><p>Dieselbe Datei von mehreren Quellen gleichzeitig laden — fällt ein Mirror aus, übernehmen die anderen.</p></div>
+    <div class="card"><span class="ico">🔌</span><h3>Reconnect</h3><p>Automatische Wiederverbindung bei Wartezeiten — der Downloader wartet nicht auf Limits, er macht weiter.</p></div>
+    <div class="card"><span class="ico">🖥️</span><h3>Web-Panel</h3><p>Dunkles Dashboard mit Live-Fortschritt, Pause/Resume, Speed und Zeitplan — von jedem Gerät im Netz erreichbar.</p></div>
+    <div class="card"><span class="ico">🌐</span><h3>Browser-Integration</h3><p>Nahtlose Einbindung in Chrome, Firefox und Edge — Downloads werden automatisch abgefangen.</p></div>
+    <div class="card"><span class="ico">🗂️</span><h3>Dateiverwaltung</h3><p>Downloads automatisch nach Typ sortieren und in vordefinierten Ordnern ablegen — Software, Videos, Musik, Archive.</p></div>
+    <div class="card"><span class="ico">📦</span><h3>Automatisch entpacken</h3><p>Archive werden nach dem Download automatisch entpackt — auf Wunsch direkt ans Ziel verschoben.</p></div>
+    <div class="card"><span class="ico">📋</span><h3>Clipboard-Watcher</h3><p>Links kopieren genügt — der Downloader schlägt den Download automatisch vor. Event-getrieben, kein ständiges Abfragen.</p></div>
+    <div class="card"><span class="ico">🔐</span><h3>Sicher &amp; schlank</h3><p>Keine Adware, keine Malware, kein JVM-Ballast. Login mit Passwort-Regeln und 2FA — deine Daten bleiben bei dir.</p></div>
   </div>
 </div></section>
 
 <section class="alt" id="so-gehts"><div class="wrap">
   <h2>In 3 Minuten eingerichtet.</h2>
-  <p class="lead">Kein JDownloader, keine JVM, kein Plugin-Zoo.</p>
+  <p class="lead">Kein Java, kein Plugin-Zoo — installieren, Link rein, fertig.</p>
   <div class="steps">
     <div class="step"><span class="n">1</span><h3 style="margin-bottom:8px;">Installieren</h3><p style="color:var(--muted);font-size:14.5px;">Windows-ZIP entpacken oder Linux-DEB installieren. Läuft sofort, ohne Java.</p></div>
-    <div class="step"><span class="n">2</span><h3 style="margin-bottom:8px;">Debrid verbinden</h3><p style="color:var(--muted);font-size:14.5px;">API-Key eintragen — der Downloader prüft den Dienst live und speichert ihn verschlüsselt.</p></div>
-    <div class="step"><span class="n">3</span><h3 style="margin-bottom:8px;">Links reinkopieren</h3><p style="color:var(--muted);font-size:14.5px;">Container oder Hoster-Link kopieren — der Rest läuft automatisch bis zum Media-Server.</p></div>
+    <div class="step"><span class="n">2</span><h3 style="margin-bottom:8px;">Download anlegen</h3><p style="color:var(--muted);font-size:14.5px;">Link, Magnet-Link oder Torrent einfügen — der Downloader legt los.</p></div>
+    <div class="step"><span class="n">3</span><h3 style="margin-bottom:8px;">Ziel wählen</h3><p style="color:var(--muted);font-size:14.5px;">Ordner und Zeitplan festlegen — der Rest läuft automatisch.</p></div>
   </div>
 </div></section>
 
 <section id="download"><div class="wrap">
   <h2>Herunterladen.</h2>
-  <p class="lead">Beide Versionen sind aktuell 0.2.0 — wähle dein System. Die Links sind verschlüsselt und laufen nach 15 Minuten ab.</p>
+  <p class="lead">Version 0.2.0 — wähle dein Betriebssystem. Die Links sind verschlüsselt und laufen nach 15 Minuten ab.</p>
   <div class="dlwrap">
     <div class="dlcard">
-      <span class="ico">🪟</span>
-      <h3>Windows</h3>
+      <div class="os">
+        <svg viewBox="0 0 24 24" width="34" height="34"><path fill="#4da6ff" d="M2 4.5L9.5 3.4v7.1H2zM11 3.4l9-1.3v7.4h-9zM2 12h7.5v7.1L2 17.9zM11 12h9v7.4l-9-1.3z"/></svg>
+        <h3>Windows</h3>
+      </div>
       <p>Für Windows 10/11. ZIP entpacken und <code>SmartDownloader.exe</code> starten — kein Installer, keine JVM.</p>
       <a class="btn gold" href="/download/downloader_win">Windows (.zip) herunterladen</a>
       <div class="meta">SmartDownloader-0.2.0-windows.zip · ~24 MB</div>
     </div>
     <div class="dlcard">
-      <span class="ico">🐧</span>
-      <h3>Linux</h3>
-      <p>Für Debian &amp; Ubuntu: <code>sudo apt install ./smartys-downloader_0.2.0_amd64.deb</code> — danach im Startmenü oder <code>smartys-downloader</code> im Terminal. Panel: http://127.0.0.1:8765</p>
-      <a class="btn gold" href="/download/downloader_linux">Linux (.deb) herunterladen</a>
+      <div class="os">
+        <svg viewBox="0 0 24 24" width="34" height="34"><g fill="none" stroke="#e95420" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="3.5" r="1.4"/><circle cx="19.4" cy="12" r="1.4"/><circle cx="12" cy="20.5" r="1.4"/></g></svg>
+        <h3>Ubuntu</h3>
+      </div>
+      <p>Für Ubuntu 22.04 und neuer: <code>sudo apt install ./smartys-downloader_0.2.0_amd64.deb</code> — danach im Startmenü oder <code>smartys-downloader</code> im Terminal.</p>
+      <a class="btn gold" href="/download/downloader_linux">Ubuntu (.deb) herunterladen</a>
+      <div class="meta">smartys-downloader_0.2.0_amd64.deb · ~61 MB</div>
+    </div>
+    <div class="dlcard">
+      <div class="os">
+        <svg viewBox="0 0 24 24" width="34" height="34"><path fill="none" stroke="#d70a53" stroke-width="1.7" d="M12 12.5 A .5 .5 0 0 1 12.5 12 A 1 1 0 0 1 11.5 12 A 1.5 1.5 0 0 1 13 12 A 2 2 0 0 1 11 12 A 2.5 2.5 0 0 1 13.5 12 A 3 3 0 0 1 10.5 12 A 3.5 3.5 0 0 1 14 12 A 4 4 0 0 1 10 12 A 4.5 4.5 0 0 1 14.5 12 A 5 5 0 0 1 9.5 12"/></svg>
+        <h3>Debian</h3>
+      </div>
+      <p>Für Debian 12 und neuer: <code>sudo apt install ./smartys-downloader_0.2.0_amd64.deb</code> — Panel läuft auf http://127.0.0.1:8765.</p>
+      <a class="btn gold" href="/download/downloader_linux">Debian (.deb) herunterladen</a>
       <div class="meta">smartys-downloader_0.2.0_amd64.deb · ~61 MB</div>
     </div>
   </div>
