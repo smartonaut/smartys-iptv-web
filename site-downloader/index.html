@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Smartys Downloader — der schlanke Download-Manager. Container- und Hoster-Links reinkopieren, Debrid-Dienste lösen 634 Hoster auf, Filme landen automatisch entpackt im Media-Server.">
+<title>Smartys Downloader — Der schlanke Download-Manager</title>
+<link rel="canonical" href="https://downloader.smartys.tech/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Smartys">
+<meta property="og:title" content="Smartys Downloader — Der schlanke Download-Manager">
+<meta property="og:description" content="Container- und Hoster-Links reinkopieren, fertig. Debrid-Dienste lösen 634 Hoster auf, Filme landen automatisch entpackt im Media-Server.">
+<meta property="og:url" content="https://downloader.smartys.tech/">
+<meta property="og:image" content="https://downloader.smartys.tech/logo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Smartys Downloader — Der schlanke Download-Manager">
+<meta name="twitter:description" content="Container- und Hoster-Links reinkopieren, fertig. Debrid-Dienste lösen 634 Hoster auf.">
+<meta name="twitter:image" content="https://downloader.smartys.tech/logo.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#070a12; --panel:rgba(255,255,255,.04); --border:rgba(255,255,255,.08);
+    --text:#f2f5ff; --muted:#9aa7c4; --dim:#6b7896;
+    --gold:#ffc94d; --violet:#8b5cf6; --cyan:#22d3ee; --pink:#f472b6; --green:#4ade80;
+  }
+  body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .wrap { max-width:1140px; margin:0 auto; padding:0 24px; }
+
+  nav { position:sticky; top:0; z-index:20; background:rgba(7,10,18,.7); backdrop-filter:blur(20px) saturate(180%); border-bottom:1px solid var(--border); }
+  nav .wrap { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; }
+  .logo { font-size:19px; font-weight:800; letter-spacing:-.3px; }
+  .logo .dot { color:var(--gold); }
+  .logo .glow { background:linear-gradient(90deg,var(--cyan),var(--green)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .logo .home { color:var(--dim); font-size:13px; text-decoration:none; margin-left:14px; font-weight:500; }
+  nav .links { display:flex; gap:8px; align-items:center; }
+  .btn { display:inline-block; padding:11px 22px; border-radius:12px; font-weight:600; font-size:14.5px; text-decoration:none; border:none; cursor:pointer; transition:transform .15s, box-shadow .2s; }
+  .btn:hover { transform:translateY(-2px); }
+  .btn.gold { background:linear-gradient(135deg,var(--gold),#ffb347); color:#1a1200; box-shadow:0 6px 24px rgba(255,201,77,.35); }
+  .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  .btn.ghost:hover { border-color:rgba(255,255,255,.25); background:rgba(255,255,255,.1); }
+
+  .hero { position:relative; padding:110px 0 80px; overflow:hidden; }
+  .hero::before { content:""; position:absolute; inset:0; pointer-events:none;
+    background:
+      radial-gradient(600px 400px at 15% 10%, rgba(34,211,238,.26), transparent 60%),
+      radial-gradient(700px 500px at 85% 20%, rgba(74,222,128,.18), transparent 60%),
+      radial-gradient(500px 400px at 50% 90%, rgba(139,92,246,.16), transparent 60%); }
+  .hero .wrap { position:relative; z-index:1; }
+  .pill { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--muted);
+    background:rgba(255,255,255,.05); border:1px solid var(--border); border-radius:99px; padding:7px 16px; margin-bottom:24px; }
+  .pill .live { width:8px; height:8px; border-radius:50%; background:#4ade80; box-shadow:0 0 12px #4ade80; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .hero h1 { font-size:clamp(36px,5.5vw,64px); font-weight:900; letter-spacing:-2.5px; line-height:1.03; max-width:820px; }
+  .hero h1 .grad { background:linear-gradient(90deg,var(--cyan),var(--green)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .hero p.sub { font-size:19px; color:var(--muted); max-width:600px; margin:24px 0 34px; }
+  .cta-row { display:flex; gap:14px; flex-wrap:wrap; }
+  .note { font-size:13px; color:var(--dim); margin-top:14px; }
+  .stats { display:flex; gap:40px; margin-top:56px; flex-wrap:wrap; }
+  .stat b { font-size:32px; font-weight:800; display:block; letter-spacing:-1px; }
+  .stat span { font-size:13px; color:var(--dim); }
+
+  .visual { margin:70px auto 0; max-width:980px; border-radius:22px; border:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.02));
+    box-shadow:0 40px 100px rgba(0,0,0,.6); overflow:hidden; backdrop-filter:blur(6px); }
+  .visual .topbar { display:flex; justify-content:space-between; padding:14px 22px; border-bottom:1px solid var(--border); color:var(--dim); font-size:12px; }
+  .visual .topbar .dots { display:flex; gap:6px; }
+  .visual .topbar .dots i { width:10px; height:10px; border-radius:50%; display:block; }
+  .visual .content { display:flex; min-height:340px; }
+  .visual .side { width:230px; border-right:1px solid var(--border); padding:16px; }
+  .visual .side div { padding:10px 14px; border-radius:10px; color:var(--dim); font-size:13px; margin-bottom:4px; }
+  .visual .side div.sel { background:rgba(255,201,77,.12); color:var(--gold); font-weight:700; border-left:3px solid var(--gold); }
+  .visual .list { flex:1; padding:16px 20px; }
+  .visual .rowitem { display:flex; align-items:center; gap:14px; background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:8px; }
+  .visual .rowitem.focus { border:1px solid var(--cyan); background:rgba(34,211,238,.06); box-shadow:0 0 20px rgba(34,211,238,.15); }
+  .visual .chip { color:var(--dim); font-weight:700; font-size:12px; width:56px; }
+  .visual .dlname { font-weight:600; font-size:14px; flex:1; }
+  .visual .dlbar { height:6px; border-radius:99px; background:rgba(255,255,255,.08); width:120px; overflow:hidden; }
+  .visual .dlbar i { display:block; height:100%; width:70%; background:linear-gradient(90deg,var(--cyan),var(--green)); border-radius:99px; }
+  .visual .dlstate { font-size:12px; color:var(--dim); }
+
+  section { padding:90px 0; position:relative; }
+  section.alt { background:rgba(255,255,255,.02); border-top:1px solid var(--border); border-bottom:1px solid var(--border); }
+  h2 { font-size:clamp(28px,4vw,44px); font-weight:800; letter-spacing:-1px; margin-bottom:14px; }
+  .lead { color:var(--muted); font-size:18px; max-width:640px; margin-bottom:48px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:18px; padding:28px; transition:transform .2s, border-color .2s; }
+  .card:hover { transform:translateY(-4px); border-color:rgba(255,255,255,.2); }
+  .card .ico { font-size:34px; margin-bottom:16px; display:inline-block; filter:drop-shadow(0 4px 12px rgba(34,211,238,.4)); }
+  .card h3 { font-size:18px; margin-bottom:8px; }
+  .card p { color:var(--muted); font-size:14.5px; }
+
+  .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:20px; }
+  .step { position:relative; padding:28px; border-radius:18px; background:var(--panel); border:1px solid var(--border); }
+  .step .n { position:absolute; top:-16px; left:24px; width:36px; height:36px; border-radius:12px;
+    background:linear-gradient(135deg,var(--cyan),var(--green)); color:#04120c; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:15px; box-shadow:0 6px 16px rgba(34,211,238,.3); }
+
+  .dlwrap { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:22px; align-items:stretch; }
+  .dlcard { background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:32px; position:relative; display:flex; flex-direction:column; }
+  .dlcard .ico { font-size:40px; margin-bottom:14px; display:inline-block; }
+  .dlcard h3 { font-size:20px; }
+  .dlcard p { color:var(--muted); font-size:14.5px; margin:10px 0 22px; flex:1; }
+  .dlcard .meta { color:var(--dim); font-size:13px; margin-top:14px; }
+
+  footer { padding:40px 0 60px; color:var(--dim); font-size:13px; border-top:1px solid var(--border); }
+  footer .wrap { display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+  footer a { color:var(--muted); text-decoration:none; }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Smartys Downloader",
+  "operatingSystem": "Windows, Linux",
+  "applicationCategory": "UtilitiesApplication",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+  "description": "Schlanker Download-Manager: Container- und Hoster-Links reinkopieren, Debrid-Dienste lösen 634 Hoster auf, Filme landen automatisch entpackt im Media-Server."
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo">Smartys<span class="dot">·</span><span class="glow">Downloader</span><a class="home" href="https://smartys.tech">← smartys.tech</a></div>
+  <div class="links">
+    <a class="btn ghost" href="#features">Features</a>
+    <a class="btn ghost" href="#download">Download</a>
+    <a class="btn ghost" href="https://forum.smartys.tech">Community</a>
+    <a class="btn gold" href="#download">Herunterladen</a>
+  </div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="pill"><span class="live"></span> Beta 0.2.0 — Windows &amp; Linux</div>
+  <h1>Links rein, <span class="grad">fertig.</span></h1>
+  <p class="sub">Der schlanke Download-Manager: Container- und Hoster-Links einfach reinkopieren — Debrid-Dienste lösen 634 Hoster auf, Filme landen automatisch entpackt im Media-Server.</p>
+  <div class="cta-row">
+    <a class="btn gold" href="/download/downloader_win">Windows (.zip) herunterladen</a>
+    <a class="btn ghost" href="/download/downloader_linux">Linux (.deb) herunterladen</a>
+  </div>
+  <p class="note">Beta-Version 0.2.0 · Verschlüsselte Download-Links · Download zählt anonym als Zahl mit</p>
+  <div class="stats">
+    <div class="stat"><b>634</b><span>Hoster via Debrid</span></div>
+    <div class="stat"><b>8</b><span>Debrid-Dienste</span></div>
+    <div class="stat"><b>&lt;50 MB</b><span>Footprint</span></div>
+    <div class="stat"><b>0 €</b><span>Kostenlos</span></div>
+  </div>
+
+  <div class="visual">
+    <div class="topbar">
+      <span class="dots"><i style="background:#ff5f56"></i><i style="background:#ffbd2e"></i><i style="background:#27c93f"></i></span>
+      <span>Smartys Downloader — Panel</span>
+    </div>
+    <div class="content">
+      <div class="side">
+        <div class="sel">Downloads</div>
+        <div>Accounts</div>
+        <div>Einstellungen</div>
+      </div>
+      <div class="list">
+        <div class="rowitem"><span class="chip">FILME</span><div class="dlname">One.Last.Shot.2026.German.1080p</div><div class="dlbar"><i></i></div><div class="dlstate">7,4 GB · entpackt ✓</div></div>
+        <div class="rowitem focus"><span class="chip">SERIEN</span><div class="dlname">Soulm8te.S01E01.German.1080p</div><div class="dlbar"><i style="width:42%"></i></div><div class="dlstate">2,1 GB · lädt</div></div>
+        <div class="rowitem"><span class="chip">MUSIK</span><div class="dlname">Album.2026.FLAC</div><div class="dlbar"><i style="width:100%"></i></div><div class="dlstate">410 MB · fertig ✓</div></div>
+      </div>
+    </div>
+  </div>
+</div></header>
+
+<section id="features"><div class="wrap">
+  <h2>Alles drin, nichts dahinter.</h2>
+  <p class="lead">Der Download-Manager, der seine Arbeit macht — ohne JVM-Ballast.</p>
+  <div class="grid">
+    <div class="card"><span class="ico">🧲</span><h3>Container &amp; Hoster</h3><p>DLC-, CNL2- und Hoster-Links einfach reinkopieren — Filecrypt, hide.cx und data-load.me werden nativ aufgelöst.</p></div>
+    <div class="card"><span class="ico">⚡</span><h3>Debrid-Router</h3><p>8 Debrid-Dienste (Real-Debrid, DebridLink, AllDebrid, Premiumize, TorBox, EasyDebrid, LinkSnappy, Offcloud) lösen 634 Hoster auf — mit automatischem Fallback.</p></div>
+    <div class="card"><span class="ico">🧩</span><h3>Filecrypt nativ</h3><p>Cloudflare-Challenge und PoW-Captcha werden im echten Browser gelöst — kein Plugin-Friedhof, kein Captcha-Stau.</p></div>
+    <div class="card"><span class="ico">📦</span><h3>Automatisch entpacken</h3><p>Multipart-RAR wird erst entschlüsselt, wenn alle Teile da sind — die größte Videodatei wandert per rsync zum Media-Server, Archive löschen sich selbst.</p></div>
+    <div class="card"><span class="ico">🗂️</span><h3>Kategorien &amp; Ziele</h3><p>Filme, Serien, Software, Musik, Hörspiel, Kinder, Sonstiges — jede Kategorie hat ihr eigenes Ziel (Jellyfin, Audiobookshelf …).</p></div>
+    <div class="card"><span class="ico">🖥️</span><h3>Web-Panel</h3><p>Dunkles Dashboard mit Live-Fortschritt, Pause/Resume, Speed und Account-Verwaltung — überall erreichbar.</p></div>
+    <div class="card"><span class="ico">📋</span><h3>Clipboard-Watcher</h3><p>Links kopieren genügt — der Downloader schlägt das Paket automatisch vor. Event-getrieben, kein ständiges Abfragen.</p></div>
+    <div class="card"><span class="ico">🔌</span><h3>Click'n'Load-Bridge</h3><p>Browser-Extension fängt CNL2-Popups ab und übergibt sie direkt an den Downloader — DLC-Entschlüsselung lokal.</p></div>
+    <div class="card"><span class="ico">🔐</span><h3>Verschlüsselt</h3><p>Login mit Passwort-Regeln, 2FA (TOTP) und API-Keys Fernet-verschlüsselt in der lokalen Datenbank — nie im Klartext.</p></div>
+    <div class="card"><span class="ico">🧾</span><h3>Passwort-Liste</h3><p>Container- und Archiv-Passwörter werden automatisch durchgetestet — kein manuelles Nachschlagen.</p></div>
+    <div class="card"><span class="ico">🔄</span><h3>Resume &amp; Retry</h3><p>Chunked Downloads mit Resume über .part, Speed-Limit und automatischem Retry — Abbruch ist kein Neustart.</p></div>
+    <div class="card"><span class="ico">🚀</span><h3>Direct-Hoster-Fallback</h3><p>Hoster ohne Debrid-Support (filejoker, webshare.cz, krakenfiles, f2h.to) laufen über eigene Plugins.</p></div>
+  </div>
+</div></section>
+
+<section class="alt" id="so-gehts"><div class="wrap">
+  <h2>In 3 Minuten eingerichtet.</h2>
+  <p class="lead">Kein JDownloader, keine JVM, kein Plugin-Zoo.</p>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><h3 style="margin-bottom:8px;">Installieren</h3><p style="color:var(--muted);font-size:14.5px;">Windows-ZIP entpacken oder Linux-DEB installieren. Läuft sofort, ohne Java.</p></div>
+    <div class="step"><span class="n">2</span><h3 style="margin-bottom:8px;">Debrid verbinden</h3><p style="color:var(--muted);font-size:14.5px;">API-Key eintragen — der Downloader prüft den Dienst live und speichert ihn verschlüsselt.</p></div>
+    <div class="step"><span class="n">3</span><h3 style="margin-bottom:8px;">Links reinkopieren</h3><p style="color:var(--muted);font-size:14.5px;">Container oder Hoster-Link kopieren — der Rest läuft automatisch bis zum Media-Server.</p></div>
+  </div>
+</div></section>
+
+<section id="download"><div class="wrap">
+  <h2>Herunterladen.</h2>
+  <p class="lead">Beide Versionen sind aktuell 0.2.0 — wähle dein System. Die Links sind verschlüsselt und laufen nach 15 Minuten ab.</p>
+  <div class="dlwrap">
+    <div class="dlcard">
+      <span class="ico">🪟</span>
+      <h3>Windows</h3>
+      <p>Für Windows 10/11. ZIP entpacken und <code>SmartDownloader.exe</code> starten — kein Installer, keine JVM.</p>
+      <a class="btn gold" href="/download/downloader_win">Windows (.zip) herunterladen</a>
+      <div class="meta">SmartDownloader-0.2.0-windows.zip · ~24 MB</div>
+    </div>
+    <div class="dlcard">
+      <span class="ico">🐧</span>
+      <h3>Linux</h3>
+      <p>Für Debian &amp; Ubuntu: <code>sudo apt install ./smartys-downloader_0.2.0_amd64.deb</code> — danach im Startmenü oder <code>smartys-downloader</code> im Terminal. Panel: http://127.0.0.1:8765</p>
+      <a class="btn gold" href="/download/downloader_linux">Linux (.deb) herunterladen</a>
+      <div class="meta">smartys-downloader_0.2.0_amd64.deb · ~61 MB</div>
+    </div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div>© 2026 Smartys Downloader — smartys.tech</div>
+  <div>
+    <a href="https://forum.smartys.tech">Forum</a>
+    <a href="https://smartys.tech" style="margin-left:18px;">smartys.tech</a>
+    <a href="/impressum.html" style="margin-left:18px;">Impressum</a>
+    <a href="/datenschutz.html" style="margin-left:18px;">Datenschutz</a>
+    <a href="/agb.html" style="margin-left:18px;">AGB</a>
+  </div>
+</div></footer>
+
+</body>
+</html>
