@@ -3,31 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Smartys M3U Player — der schlanke Player für Fire TV und Android. Eigene M3U-Playlists, EPG, 4K.">
-<title>Smartys M3U Player — Unser Player, deine Lines</title>
+<meta name="description" content="Smartys IPTV Player für Fire TV &amp; Android und Enigma2-Plugin für OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision, PurE2. Live-TV, EPG, 4K, VOD Filme &amp; Serien.">
+<title>Smartys IPTV Player &amp; Enigma2-Plugin (OpenATV, VTi, BlackHole)</title>
 <link rel="canonical" href="https://player.smartys.tech/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Smartys">
-<meta property="og:title" content="Smartys M3U Player — der schlanke Player für Fire TV und Android">
-<meta property="og:description" content="Eigene M3U-Playlists, EPG, 4K, VOD Filme & Serien, Kindersicherung. Beta-APK direkt laden.">
+<meta property="og:title" content="Smartys IPTV Player &amp; Enigma2-Plugin für OpenATV, VTi, BlackHole">
+<meta property="og:description" content="IPTV-Player für Fire TV &amp; Android und Enigma2-Plugin für OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision, PurE2. Live-TV, EPG, 4K, VOD.">
 <meta property="og:url" content="https://player.smartys.tech/">
 <meta property="og:image" content="https://player.smartys.tech/logo.png">
 <meta property="og:locale" content="de_DE">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Smartys M3U Player — der schlanke Player für Fire TV und Android">
-<meta name="twitter:description" content="Eigene M3U-Playlists, EPG, 4K, VOD Filme & Serien. Beta-APK direkt laden.">
+<meta name="twitter:title" content="Smartys IPTV Player &amp; Enigma2-Plugin für OpenATV, VTi, BlackHole">
+<meta name="twitter:description" content="IPTV-Player für Fire TV &amp; Android und Enigma2-Plugin für OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision, PurE2.">
 <meta name="twitter:image" content="https://player.smartys.tech/logo.png">
 <link rel="icon" type="image/png" href="favicon.png">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "Smartys M3U Player",
-  "operatingSystem": "Android",
-  "applicationCategory": "MultimediaApplication",
-  "softwareVersion": "0.4.4",
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
-  "description": "Der schlanke M3U/IPTV-Player für Fire TV und Android: eigene M3U-Playlists, EPG, 4K, VOD Filme & Serien, Multi-Playlist und Kindersicherung."
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Smartys IPTV Player",
+      "operatingSystem": "Android",
+      "applicationCategory": "MultimediaApplication",
+      "softwareVersion": "0.4.4",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+      "description": "Der schlanke IPTV-Player für Fire TV und Android: eigene M3U-Playlists, EPG, 4K, VOD Filme & Serien, Multi-Playlist und Kindersicherung."
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Smartys IPTV Enigma2-Plugin",
+      "operatingSystem": "OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision, PurE2",
+      "applicationCategory": "MultimediaApplication",
+      "softwareVersion": "0.1.0",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+      "description": "IPTV-Plugin für Enigma2-Receiver (VU+, Dreambox, GigaBlue): Live-TV, Filme, Serien mit EPG-Infobar, Aufnahme und Timeshift. Läuft auf OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision und PurE2."
+    }
+  ]
 }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -217,6 +230,20 @@
       <a class="btn gold" href="https://panel.smartys.tech" style="text-align:center">Smartys+ wählen</a>
     </div>
   </div>
+</div></section>
+
+<section class="alt" id="enigma2"><div class="wrap">
+  <h2>Enigma2-Plugin für deine Sat-Receiver.</h2>
+  <p class="lead">Smartys IPTV läuft auch auf Enigma2-Boxen — VU+, Dreambox, GigaBlue &amp; mehr. Als .ipk direkt installierbar.</p>
+  <div class="grid">
+    <div class="card"><span class="ico">📺</span><h3>Live-TV &amp; EPG</h3><p>Senderliste mit Logos und EPG-Infobar im Vollbild — Sendezeit, Fortschrittsbalken, Videoformat.</p></div>
+    <div class="card"><span class="ico">🎬</span><h3>Filme &amp; Serien</h3><p>VOD und Serien mit Cover, großer Beschreibung und Trailer — wie in der App.</p></div>
+    <div class="card"><span class="ico">⏺️</span><h3>Aufnahme &amp; Timeshift</h3><p>Sendungen aufnehmen und Live-TV pausieren — direkt auf die Festplatte der Box.</p></div>
+  </div>
+  <div class="cta-row" style="margin-top:32px;">
+    <a class="btn gold" href="/download/enigma2">Enigma2-Download (IPK)</a>
+  </div>
+  <p style="font-size:13px;color:var(--dim);margin-top:14px;">Kompatibel mit OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision, PurE2, OpenHDF, OpenSPA und weiteren Enigma2-Images. Alpha-Version — installieren per <code>opkg install</code>.</p>
 </div></section>
 
 <footer><div class="wrap">
