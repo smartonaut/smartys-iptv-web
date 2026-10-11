@@ -23,6 +23,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -902,6 +904,31 @@ fun InfoRow(label: String, value: String) {
 // ---------- Login ----------
 // ---------- Pairing (IBPlayer-Start) ----------
 
+fun qrCodeBitmap(content: String, size: Int = 512): android.graphics.Bitmap {
+    val matrix = com.google.zxing.qrcode.QRCodeWriter().encode(
+        content, com.google.zxing.BarcodeFormat.QR_CODE, size, size)
+    val pixels = IntArray(size * size)
+    for (y in 0 until size) {
+        for (x in 0 until size) {
+            // dunkles Modul auf hellem Grund (gut scannbar)
+            pixels[y * size + x] = if (matrix[x, y]) 0xFF10141F.toInt() else 0xFFFFFFFF.toInt()
+        }
+    }
+    return android.graphics.Bitmap.createBitmap(
+        size, size, android.graphics.Bitmap.Config.ARGB_8888
+    ).apply { setPixels(pixels, 0, size, 0, 0, size, size) }
+}
+
+@Composable
+fun QrCode(content: String, modifier: Modifier = Modifier) {
+    val bitmap = remember(content) { qrCodeBitmap(content) }
+    androidx.compose.foundation.Image(
+        bitmap = bitmap.asImageBitmap(),
+        contentDescription = "QR-Code zum Pairing",
+        modifier = modifier
+    )
+}
+
 @Composable
 fun PairingScreen(vm: MainViewModel) {
     val appCtx = androidx.compose.ui.platform.LocalContext.current
@@ -945,12 +972,24 @@ fun PairingScreen(vm: MainViewModel) {
             Text("Dein Passwort", color = Color(0xFF8FA3C8), fontSize = 13.sp)
             Text(pairingPw, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
+
+        // QR-Code: scannen statt auf der Fernbedienung abtippen
+        QrCode(
+            "https://panel.smartys.tech/pair?mac=$playerId&pw=$pairingPw",
+            modifier = Modifier.width(220.dp).height(220.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White).padding(12.dp)
+        )
+        Spacer(Modifier.height(14.dp))
+        Text("QR-Code mit dem Handy scannen", color = Color(0xFF8FA3C8), fontSize = 14.sp)
+        Spacer(Modifier.height(20.dp))
 
         Text(
-            "1. Gehe auf panel.smartys.tech\n" +
-            "2. Melde dich mit Player-ID und Passwort an\n" +
-            "3. Hinterlege dort deine Playlist — danach hier auf „Prüfen“ drücken",
+            "1. QR-Code scannen und Playlist hinterlegen\n" +
+            "2. Oder manuell: panel.smartys.tech\n" +
+            "   mit Player-ID + Passwort anmelden\n" +
+            "3. Danach hier auf „Prüfen“ drücken",
             color = Color(0xFF8FA3C8), fontSize = 15.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             lineHeight = 24.sp
         )
