@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -16,9 +18,23 @@ android {
         versionName = "0.4.4"
     }
 
+    signingConfigs {
+        create("release") {
+            val props = Properties().apply {
+                val f = rootProject.file("keystore.properties")
+                if (f.exists()) load(f.inputStream())
+            }
+            storeFile = rootProject.file(props.getProperty("storeFile"))
+            storePassword = props.getProperty("storePassword")
+            keyAlias = props.getProperty("keyAlias")
+            keyPassword = props.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

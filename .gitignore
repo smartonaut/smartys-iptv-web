@@ -24,6 +24,7 @@ data/
 *.pem
 *.jks
 *.keystore
+keystore.properties
 
 # ---------- Logs / Cache ----------
 *.log
