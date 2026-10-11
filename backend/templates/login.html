@@ -29,9 +29,9 @@
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
     <form method="post" action="/login">
       <label for="mac">MAC-Adresse des Players</label>
-      <input id="mac" name="mac" placeholder="AA:BB:CC:11:22:33" required autofocus autocomplete="off" spellcheck="false">
+      <input id="mac" name="mac" value="{{ prefill_mac or '' }}" placeholder="AA:BB:CC:11:22:33" required autofocus autocomplete="off" spellcheck="false">
       <label for="password">Pairing-Passwort</label>
-      <input id="password" name="password" type="password" placeholder="Vom Player angezeigt" required>
+      <input id="password" name="password" value="{{ prefill_pw or '' }}" type="password" placeholder="Vom Player angezeigt" required>
       <button type="submit">Anmelden</button>
     </form>
     <div class="hint">

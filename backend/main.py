@@ -42,7 +42,21 @@ def _rate_limited(mac: str) -> bool:
 def login_page(request: Request):
     if request.session.get("player_mac"):
         return RedirectResponse("/players", status_code=302)
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "error": None, "prefill_mac": "", "prefill_pw": ""})
+
+
+@app.get("/pair", response_class=HTMLResponse)
+def pair_page(request: Request, mac: str = "", pw: str = ""):
+    # QR-Login: TV zeigt einen QR-Code, der diese Route mit vorbefüllten
+    # Player-Daten öffnet — kein Abtippen auf der Fernbedienung nötig.
+    if request.session.get("player_mac"):
+        return RedirectResponse("/players", status_code=302)
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "error": None,
+         "prefill_mac": mac, "prefill_pw": pw})
 
 
 @app.post("/login")
