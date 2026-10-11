@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Smartys M3U Creator — erstelle deine eigene M3U-Playlist aus legalen öffentlich-rechtlichen Sendern (Das Erste, ZDF, 3sat, ARTE, phoenix, tagesschau24). Kostenlos, ohne Anmeldung.">
-<title>Smartys M3U Creator — öffentlich-rechtliche Sender als Playlist</title>
+<meta name="description" content="Smartys M3U Creator — erstelle deine eigene M3U-Playlist aus legalen öffentlich-rechtlichen Sendern oder deinen eigenen Stream-Links. Kostenlos, ohne Anmeldung.">
+<title>Smartys M3U Creator — eigene Stream-Links zur Playlist machen</title>
 <link rel="canonical" href="https://player.smartys.tech/m3u.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Smartys">
-<meta property="og:title" content="Smartys M3U Creator — öffentlich-rechtliche Sender als Playlist">
-<meta property="og:description" content="Stelle dir deine eigene M3U-Playlist aus legalen öffentlich-rechtlichen Sendern zusammen. Kostenlos, ohne Anmeldung.">
+<meta property="og:title" content="Smartys M3U Creator — eigene Stream-Links zur Playlist machen">
+<meta property="og:description" content="Öffentlich-rechtliche Sender wählen oder eigene Stream-Links einfügen — Smartys erstellt deine fertige M3U.">
 <meta property="og:url" content="https://player.smartys.tech/m3u.html">
 <meta name="theme-color" content="#070a12">
 <link rel="icon" type="image/png" href="favicon.png">
@@ -34,6 +34,7 @@
   .btn:hover { transform:translateY(-2px); }
   .btn.gold { background:linear-gradient(135deg,var(--gold),#ffb347); color:#1a1200; box-shadow:0 6px 24px rgba(255,201,77,.35); }
   .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  .btn.blue { background:linear-gradient(135deg,#2f80ed,#22d3ee); color:#fff; box-shadow:0 6px 24px rgba(47,128,237,.3); }
 
   .hero { position:relative; padding:90px 0 40px; overflow:hidden; }
   .hero::before { content:""; position:absolute; inset:0; pointer-events:none;
@@ -43,14 +44,14 @@
   .hero .wrap { position:relative; z-index:1; }
   h1 { font-size:clamp(34px,5vw,54px); font-weight:900; letter-spacing:-2px; line-height:1.05; }
   h1 .grad { background:linear-gradient(90deg,var(--gold),var(--pink),var(--violet)); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  .lead { color:var(--muted); font-size:18px; max-width:620px; margin:18px 0 32px; }
+  .lead { color:var(--muted); font-size:18px; max-width:640px; margin:18px 0 32px; }
 
   .notice { background:rgba(34,211,238,.08); border:1px solid rgba(34,211,238,.25); border-radius:14px; padding:14px 18px; font-size:14px; color:var(--muted); margin-bottom:28px; }
   .notice b { color:var(--cyan); }
 
   .creator { background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:28px; }
-  .creator .head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
   .creator h2 { font-size:20px; }
+  .creator .head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
   .select-all { font-size:13.5px; color:var(--muted); background:none; border:1px solid var(--border); border-radius:8px; padding:6px 12px; cursor:pointer; }
   .ch-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
   .ch { display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:12px; padding:12px 14px; cursor:pointer; transition:border-color .15s, background .15s; }
@@ -60,8 +61,19 @@
   .ch .sd { font-size:11px; color:var(--dim); margin-left:auto; }
   .ch:has(input:checked) { border-color:rgba(255,201,77,.45); background:rgba(255,201,77,.06); }
 
+  .own { margin-top:28px; border-top:1px solid var(--border); padding-top:24px; }
+  .own h3 { font-size:17px; margin-bottom:4px; }
+  .own p { color:var(--dim); font-size:13px; margin-bottom:12px; }
+  .own textarea { width:100%; min-height:140px; background:rgba(0,0,0,.3); border:1px solid var(--border); border-radius:12px; color:var(--text); padding:14px; font-size:13.5px; font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace; line-height:1.5; resize:vertical; }
+  .own textarea:focus { outline:none; border-color:rgba(34,211,238,.5); }
+  .own .hint { color:var(--dim); font-size:12px; margin-top:8px; }
+  .own .hint code { color:var(--cyan); }
+
   .actions { margin-top:26px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
   .counter { color:var(--dim); font-size:14px; }
+
+  .transfer { margin-top:28px; border-top:1px solid var(--border); padding-top:24px; }
+  .transfer p { color:var(--muted); font-size:14px; margin-bottom:14px; }
 
   pre.out { margin-top:24px; background:rgba(0,0,0,.35); border:1px solid var(--border); border-radius:12px; padding:18px; font-size:12.5px; color:var(--muted); overflow:auto; max-height:300px; display:none; white-space:pre-wrap; }
 
@@ -77,25 +89,38 @@
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <h1>Deine <span class="grad">M3U-Playlist</span> aus legalen Sendern.</h1>
-  <p class="lead">Wähle aus öffentlich-rechtlichen Sendern, lade die fertige M3U herunter — und teste Smartys IPTV ohne eigene Line. In jedem M3U-fähigen Player nutzbar.</p>
+  <h1>Stream-Links rein, <span class="grad">M3U raus.</span></h1>
+  <p class="lead">Wähle öffentlich-rechtliche Sender oder füge deine eigenen Stream-Links ein — Smartys baut dir die fertige M3U für den Player.</p>
 </div></header>
 
 <div class="wrap">
-  <div class="notice">✅ <b>Nur legale, frei verfügbare Sender.</b> Alle Streams stammen von den öffentlich-rechtlichen Anstalten (ARD, ZDF, ARTE, phoenix, tagesschau24) und sind frei zugänglich. Keine privaten Lines, keine Zugangsdaten.</div>
+  <div class="notice">✅ <b>Nur legale Quellen.</b> Die vorgegebenen Sender sind öffentlich-rechtlich (ARD/ZDF/ARTE/phoenix/tagesschau24). Eigene Links fügst du selbst hinzu — du bist für deine Quellen verantwortlich.</div>
 
   <div class="creator">
     <div class="head">
-      <h2>Sender auswählen</h2>
+      <h2>1 · Öffentliche Sender wählen</h2>
       <button class="select-all" id="selectAll">Alle auswählen</button>
     </div>
     <div class="ch-grid" id="grid"></div>
+
+    <div class="own">
+      <h3>2 · Eigene Stream-Links einfügen</h3>
+      <p>Eine URL pro Zeile. Optional mit Namen davor: <code>Name,URL</code></p>
+      <textarea id="ownLinks" placeholder="https://beispiel.de/stream.m3u8&#10;Mein Sender,https://beispiel.de/stream2.m3u8"></textarea>
+      <div class="hint">Beispiele: <code>https://…/stream.m3u8</code> · <code>Mein Sender,https://…/stream.m3u8</code> · oder komplette <code>#EXTINF</code>-Zeilen</div>
+    </div>
+
     <div class="actions">
       <button class="btn gold" id="dl">M3U herunterladen</button>
       <button class="btn ghost" id="copy">M3U anzeigen</button>
       <span class="counter" id="counter"></span>
     </div>
     <pre class="out" id="out"></pre>
+
+    <div class="transfer">
+      <p><b>Direkt in deinen Player übertragen:</b> Melde dich im Panel an — die Playlist wird deinem Player zugewiesen.</p>
+      <a class="btn blue" id="transfer" href="https://panel.smartys.tech" target="_blank">Anmelden &amp; übertragen →</a>
+    </div>
   </div>
 </div>
 
@@ -136,39 +161,94 @@ CHANNELS.forEach((c, i) => {
 function selected() {
   return [...grid.querySelectorAll("input:checked")].map(inp => CHANNELS[+inp.dataset.i]);
 }
-function buildM3u(list) {
+
+function autoName(url) {
+  try {
+    const p = new URL(url);
+    const seg = p.pathname.split("/").filter(Boolean);
+    return seg.length ? decodeURIComponent(seg[seg.length - 1]) : (p.hostname || "Stream");
+  } catch (e) { return "Stream"; }
+}
+
+function parseOwnLinks() {
+  const txt = document.getElementById("ownLinks").value;
+  if (!txt.trim()) return [];
+  const out = [];
+  const lines = txt.split("\n");
+  lines.forEach((raw, idx) => {
+    const line = raw.trim();
+    if (!line) return;
+    // Kompletter #EXTINF-Block? Dann Name + URL übernehmen.
+    if (line.startsWith("#EXTINF")) {
+      const m = line.match(/,(.*)$/);
+      const name = m ? m[1].trim() : ("Stream " + (idx + 1));
+      // URL steht in der nächsten Zeile
+      out.push({ name, url: null, pending: out.length });
+      return;
+    }
+    if (/^https?:\/\//.test(line)) {
+      const url = line;
+      const comma = url.indexOf(",");
+      if (comma > 0) {
+        // "Name,URL" — Name darf kein Protokoll enthalten
+        const left = url.slice(0, comma);
+        const right = url.slice(comma + 1);
+        if (/^https?:\/\//.test(right.trim())) {
+          out.push({ name: left.trim() || "Stream", url: right.trim() });
+          return;
+        }
+      }
+      out.push({ name: autoName(url), url: url });
+      return;
+    }
+    // Zeile, die keine URL ist — ignorieren (kein Crash)
+  });
+  return out;
+}
+
+function allChannels() {
+  return [...selected(), ...parseOwnLinks()].filter(c => c.url);
+}
+
+function buildM3u() {
   let m3u = "#EXTM3U\n";
-  for (const c of list) {
-    m3u += `#EXTINF:-1 tvg-name="${c.name}" group-title="Smartys Demo (öffentlich-rechtlich)",${c.name}\n${c.url}\n`;
+  for (const c of allChannels()) {
+    m3u += `#EXTINF:-1 tvg-name="${c.name}" group-title="Smartys",${c.name}\n${c.url}\n`;
   }
   return m3u;
 }
+
 function updateCounter() {
-  const n = selected().length;
-  document.getElementById("counter").textContent = `${n} / ${CHANNELS.length} Sender gewählt`;
+  const n = allChannels().length;
+  document.getElementById("counter").textContent = `${n} Einträge in der Playlist`;
 }
+
 document.getElementById("selectAll").addEventListener("click", () => {
   const allChecked = [...grid.querySelectorAll("input")].every(i => i.checked);
   grid.querySelectorAll("input").forEach(i => i.checked = !allChecked);
   document.getElementById("selectAll").textContent = allChecked ? "Alle auswählen" : "Keine auswählen";
   updateCounter();
 });
+
 document.getElementById("dl").addEventListener("click", () => {
-  const list = selected();
-  if (!list.length) { alert("Bitte mindestens einen Sender auswählen."); return; }
-  const blob = new Blob([buildM3u(list)], {type:"audio/x-mpegurl"});
+  const list = allChannels();
+  if (!list.length) { alert("Bitte mindestens einen Sender auswählen oder einen Link einfügen."); return; }
+  const blob = new Blob([buildM3u()], {type:"audio/x-mpegurl"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "smartys-demo.m3u";
+  a.download = "smartys-playlist.m3u";
   document.body.appendChild(a);
   a.click();
   a.remove();
 });
+
 document.getElementById("copy").addEventListener("click", () => {
   const out = document.getElementById("out");
   out.style.display = "block";
-  out.textContent = buildM3u(selected());
+  out.textContent = buildM3u();
 });
+
+document.getElementById("ownLinks").addEventListener("input", updateCounter);
 updateCounter();
 </script>
 </body>
