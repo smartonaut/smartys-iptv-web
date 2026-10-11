@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 import db
 import licensing
+import crypto
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)  # keine offene API-Doku
 app.add_middleware(SessionMiddleware, secret_key=os.environ["SESSION_SECRET"], max_age=12 * 3600,
@@ -26,6 +27,40 @@ templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
 _login_attempts: dict[str, list[int]] = {}
 RATE_LIMIT = 8          # Versuche
 RATE_WINDOW = 15 * 60   # pro 15 Minuten
+
+# ---- In-Memory-Cache für entsperrte Nutzer-Schlüssel (Web-Session) ----
+# sid -> (key, mac, expires_at). Der Schlüssel selbst landet NIE im Cookie
+# (Cookie trägt nur die zufällige sid). TTL wie die Web-Session: 12h.
+_SEC_KEYS: dict[str, tuple[bytes, str, float]] = {}
+_SEC_TTL = 12 * 3600
+
+
+def _sec_sid(request: Request) -> str:
+    return request.session.get("sec_sid", "") or ""
+
+
+def _cached_sec_key(request: Request, mac: str):
+    """Key aus dem Cache holen (falls sid bekannt + nicht abgelaufen)."""
+    sid = _sec_sid(request)
+    entry = _SEC_KEYS.get(sid)
+    if not entry:
+        return None
+    key, cached_mac, expires = entry
+    if cached_mac != mac or time.time() > expires:
+        _SEC_KEYS.pop(sid, None)
+        return None
+    return key
+
+
+def _cache_sec_key(request: Request, mac: str, key: bytes):
+    sid = secrets.token_urlsafe(24)
+    request.session["sec_sid"] = sid
+    _SEC_KEYS[sid] = (key, mac, time.time() + _SEC_TTL)
+    # Aufräumen abgelaufener Einträge (bei Gelegenheit).
+    if len(_SEC_KEYS) > 200:
+        now = time.time()
+        for s in [s for s, v in _SEC_KEYS.items() if v[2] < now]:
+            _SEC_KEYS.pop(s, None)
 
 
 def _rate_limited(mac: str) -> bool:
@@ -97,8 +132,21 @@ def _require_session(request: Request):
 
 
 def _players_ctx(request: Request, mac: str) -> dict:
+    """Baut den Template-Kontext je nach Sicherheits-Passwort-Zustand:
+    sec_state: 'set' = Passwort muss erst VERGEBEN werden (Pflicht),
+               'unlock' = Passwort muss EINGEGEBEN werden,
+               'open' = entsperrt, Lines sichtbar/editierbar."""
+    has_sec = db.player_has_sec(mac)
+    key = _cached_sec_key(request, mac) if has_sec else None
+    if has_sec and key is None:
+        return {"mac": mac, "name": request.session.get("player_name"),
+                "sec_state": "unlock", "providers": [], "saved": None}
+    if has_sec:
+        return {"mac": mac, "name": request.session.get("player_name"),
+                "sec_state": "open", "providers": db.list_providers(mac, key),
+                "saved": None}
     return {"mac": mac, "name": request.session.get("player_name"),
-            "providers": db.list_providers(mac), "saved": None}
+            "sec_state": "set", "providers": [], "saved": None}
 
 
 @app.get("/players", response_class=HTMLResponse)
@@ -106,11 +154,66 @@ def players_page(request: Request):
     mac = request.session.get("player_mac")
     if not mac:
         return RedirectResponse("/", status_code=302)
-    providers = db.list_providers(mac)
-    return templates.TemplateResponse(
-        "players.html",
-        {"request": request, "mac": mac, "name": request.session.get("player_name"),
-         "providers": providers, "saved": request.query_params.get("saved")})
+    ctx = _players_ctx(request, mac)
+    ctx["saved"] = request.query_params.get("saved")
+    return templates.TemplateResponse("players.html", {"request": request, **ctx})
+
+
+@app.post("/unlock")
+def unlock(request: Request, password: str = Form(...)):
+    """Sicherheits-Passwort eingeben => Key in Server-Memory (nur sid im Cookie)."""
+    mac = _require_session(request)
+    ok, key = db.verify_sec_password(mac, password)
+    if not ok or key is None:
+        return templates.TemplateResponse(
+            "players.html",
+            {"request": request, "error": "Sicherheits-Passwort falsch.",
+             **_players_ctx(request, mac)},
+            status_code=401)
+    _cache_sec_key(request, mac, key)
+    return RedirectResponse("/players", status_code=302)
+
+
+@app.post("/secpw")
+def secpw_set(request: Request, password: str = Form(...),
+              password2: str = Form(...)):
+    """Sicherheits-Passwort VERGEBEN (Pflicht beim ersten Panel-Besuch).
+    Bestehende Lines werden vom Master-Key auf den Nutzer-Schlüssel umgezogen —
+    ab jetzt ist die Line NUR mit diesem Passwort entschlüsselbar."""
+    mac = _require_session(request)
+    if len(password) < 8:
+        return templates.TemplateResponse(
+            "players.html",
+            {"request": request, "error": "Das Sicherheits-Passwort muss mindestens 8 Zeichen lang sein.",
+             **_players_ctx(request, mac)},
+            status_code=400)
+    if password != password2:
+        return templates.TemplateResponse(
+            "players.html",
+            {"request": request, "error": "Die Passwörter stimmen nicht überein.",
+             **_players_ctx(request, mac)},
+            status_code=400)
+    if db.player_has_sec(mac):
+        return RedirectResponse("/players", status_code=302)
+    key = db.set_sec_password(mac, password)
+    _cache_sec_key(request, mac, key)
+    return RedirectResponse("/players", status_code=302)
+
+
+@app.post("/secpw/reset")
+def secpw_reset(request: Request, confirm: str = Form("")):
+    """Passwort vergessen: Sicherheits-Passwort + ALLE Lines löschen.
+    Die Lines sind ohne Passwort unwiederbringlich — neu hinterlegen nötig."""
+    mac = _require_session(request)
+    if confirm != "LOESCHEN":
+        return templates.TemplateResponse(
+            "players.html",
+            {"request": request,
+             "error": "Bitte 'LOESCHEN' eingeben, um Sicherheits-Passwort und Lines unwiderruflich zu löschen.",
+             **_players_ctx(request, mac)},
+            status_code=400)
+    db.reset_sec_password(mac)
+    return RedirectResponse("/players", status_code=302)
 
 
 def parse_m3u_url(m3u_url: str):
@@ -142,6 +245,7 @@ def provider_add(request: Request, label: str = Form(...),
                  password: str = Form(""), epg_url: str = Form(""),
                  m3u_url: str = Form("")):
     mac = _require_session(request)
+    user_key = _cached_sec_key(request, mac)
     # M3U-Modus: volle URL inkl. User/Pass eingetragen =>
     # Felder automatisch ableiten (server_url/username/password leer lassen).
     if m3u_url.strip() and not (server_url.strip() and username.strip()):
@@ -160,7 +264,11 @@ def provider_add(request: Request, label: str = Form(...),
              **_players_ctx(request, mac)},
             status_code=400)
     label = (label.strip() or "Meine Line")
-    db.add_provider(mac, label, server_url.strip(), username.strip(), password, epg_url.strip())
+    try:
+        db.add_provider(mac, label, server_url.strip(), username.strip(), password,
+                        epg_url.strip(), user_key=user_key)
+    except db.SecLocked:
+        return RedirectResponse("/players", status_code=302)  # erst entsperren
     return RedirectResponse("/players?saved=1", status_code=302)
 
 
@@ -169,7 +277,11 @@ def provider_delete(request: Request, pid: int):
     _require_session(request)
     # Ownership prüfen: Provider muss zum eingeloggten Player gehören
     mac = request.session.get("player_mac")
-    rows = db.list_providers(mac)
+    user_key = _cached_sec_key(request, mac)
+    try:
+        rows = db.list_providers(mac, user_key)
+    except db.SecLocked:
+        return RedirectResponse("/players", status_code=302)
     if not any(r["id"] == pid for r in rows):
         raise HTTPException(404)
     db.delete_provider(pid)
@@ -181,11 +293,15 @@ def provider_update(request: Request, pid: int, label: str = Form(...), server_u
                     username: str = Form(...), password: str = Form(...), epg_url: str = Form(""),
                     active: str = Form(None)):
     mac = request.session.get("player_mac")
-    rows = db.list_providers(mac)
+    user_key = _cached_sec_key(request, mac)
+    try:
+        rows = db.list_providers(mac, user_key)
+    except db.SecLocked:
+        return RedirectResponse("/players", status_code=302)
     if not any(r["id"] == pid for r in rows):
         raise HTTPException(404)
     db.update_provider(pid, label.strip(), server_url.strip(), username.strip(), password,
-                       epg_url.strip(), active == "on")
+                       epg_url.strip(), active == "on", user_key=user_key)
     return RedirectResponse("/players?saved=1", status_code=302)
 
 
@@ -222,14 +338,43 @@ async def api_pair(mac: str = None, password: str = None, request: Request = Non
 
 @app.get("/api/v1/providers")
 def api_providers(request: Request):
-    """App zieht ihre Playlist-Konfiguration (Header: X-Session-Token)."""
+    """App zieht ihre Playlist-Konfiguration (Header: X-Session-Token).
+
+    Zwei Modi:
+      - Player OHNE Sicherheits-Passwort: Klartext wie bisher (Master-Key-
+        Layer), für ältere App-Versionen (Desktop/Android vor dem Update).
+      - Player MIT Sicherheits-Passwort: verschlüsseltes Payload
+        ({"encrypted": true, salt, kdf-Parameter, cipher pro Provider}).
+        Der Server kennt den Klartext nicht — die App entschlüsselt lokal
+        mit dem Nutzer-Passwort (PBKDF2-HMAC-SHA256 + AES-256-GCM)."""
     token = request.headers.get("X-Session-Token", "") or \
             request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
     player = db.session_player(token)
     if not player:
         raise HTTPException(401)
     db.touch_player(player["mac"])
-    provs = db.list_providers(player["mac"])
+    mac = player["mac"]
+    if db.player_has_sec(mac):
+        salt = db.get_sec_salt(mac)
+        provs = db.raw_providers(mac)
+        return {
+            "name": player["name"],
+            "encrypted": True,
+            "kdf": "pbkdf2-sha256",
+            "iterations": crypto.USER_KDF_ITERATIONS,
+            "salt": salt,
+            "notice": ("Deine Lines sind mit deinem Sicherheits-Passwort "
+                       "verschlüsselt. Bitte Passwort eingeben."),
+            "providers": [
+                {"id": p["id"], "label": p["label"],
+                 "cipher_server_url": p["server_url"],
+                 "cipher_username": p["username"],
+                 "cipher_password": p["password"],
+                 "cipher_epg_url": p["epg_url"]}
+                for p in provs
+            ],
+        }
+    provs = db.list_providers(mac)
     return {"name": player["name"], "providers": [
         {"id": p["id"], "label": p["label"], "server_url": p["server_url"],
          "username": p["username"], "password": p["password"],
