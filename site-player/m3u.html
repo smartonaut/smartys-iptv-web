@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Smartys M3U Creator — erstelle deine eigene M3U-Playlist aus legalen öffentlich-rechtlichen Sendern (Das Erste, ZDF, 3sat, ARTE, phoenix, tagesschau24). Kostenlos, ohne Anmeldung.">
+<title>Smartys M3U Creator — öffentlich-rechtliche Sender als Playlist</title>
+<link rel="canonical" href="https://player.smartys.tech/m3u.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Smartys">
+<meta property="og:title" content="Smartys M3U Creator — öffentlich-rechtliche Sender als Playlist">
+<meta property="og:description" content="Stelle dir deine eigene M3U-Playlist aus legalen öffentlich-rechtlichen Sendern zusammen. Kostenlos, ohne Anmeldung.">
+<meta property="og:url" content="https://player.smartys.tech/m3u.html">
+<meta name="theme-color" content="#070a12">
+<link rel="icon" type="image/png" href="favicon.png">
+<link href="fonts/inter.css" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#070a12; --panel:rgba(255,255,255,.04); --border:rgba(255,255,255,.08);
+    --text:#f2f5ff; --muted:#9aa7c4; --dim:#6b7896;
+    --gold:#ffc94d; --violet:#8b5cf6; --cyan:#22d3ee; --pink:#f472b6;
+  }
+  body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .wrap { max-width:900px; margin:0 auto; padding:0 24px; }
+
+  nav { position:sticky; top:0; z-index:20; background:rgba(7,10,18,.7); backdrop-filter:blur(20px) saturate(180%); border-bottom:1px solid var(--border); }
+  nav .wrap { display:flex; justify-content:space-between; align-items:center; padding:16px 24px; }
+  .logo { font-size:19px; font-weight:800; letter-spacing:-.3px; }
+  .logo .dot { color:var(--gold); }
+  .logo .glow { background:linear-gradient(90deg,var(--gold),var(--pink)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .logo .home { color:var(--dim); font-size:13px; text-decoration:none; margin-left:14px; font-weight:500; }
+  .btn { display:inline-block; padding:11px 22px; border-radius:12px; font-weight:600; font-size:14.5px; text-decoration:none; border:none; cursor:pointer; transition:transform .15s, box-shadow .2s; }
+  .btn:hover { transform:translateY(-2px); }
+  .btn.gold { background:linear-gradient(135deg,var(--gold),#ffb347); color:#1a1200; box-shadow:0 6px 24px rgba(255,201,77,.35); }
+  .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+
+  .hero { position:relative; padding:90px 0 40px; overflow:hidden; }
+  .hero::before { content:""; position:absolute; inset:0; pointer-events:none;
+    background:
+      radial-gradient(600px 400px at 15% 10%, rgba(139,92,246,.28), transparent 60%),
+      radial-gradient(700px 500px at 85% 20%, rgba(34,211,238,.20), transparent 60%); }
+  .hero .wrap { position:relative; z-index:1; }
+  h1 { font-size:clamp(34px,5vw,54px); font-weight:900; letter-spacing:-2px; line-height:1.05; }
+  h1 .grad { background:linear-gradient(90deg,var(--gold),var(--pink),var(--violet)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .lead { color:var(--muted); font-size:18px; max-width:620px; margin:18px 0 32px; }
+
+  .notice { background:rgba(34,211,238,.08); border:1px solid rgba(34,211,238,.25); border-radius:14px; padding:14px 18px; font-size:14px; color:var(--muted); margin-bottom:28px; }
+  .notice b { color:var(--cyan); }
+
+  .creator { background:var(--panel); border:1px solid var(--border); border-radius:20px; padding:28px; }
+  .creator .head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+  .creator h2 { font-size:20px; }
+  .select-all { font-size:13.5px; color:var(--muted); background:none; border:1px solid var(--border); border-radius:8px; padding:6px 12px; cursor:pointer; }
+  .ch-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
+  .ch { display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:12px; padding:12px 14px; cursor:pointer; transition:border-color .15s, background .15s; }
+  .ch:hover { border-color:rgba(255,255,255,.2); }
+  .ch input { accent-color:var(--gold); width:16px; height:16px; flex:none; }
+  .ch .nm { font-size:14px; font-weight:600; }
+  .ch .sd { font-size:11px; color:var(--dim); margin-left:auto; }
+  .ch:has(input:checked) { border-color:rgba(255,201,77,.45); background:rgba(255,201,77,.06); }
+
+  .actions { margin-top:26px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .counter { color:var(--dim); font-size:14px; }
+
+  pre.out { margin-top:24px; background:rgba(0,0,0,.35); border:1px solid var(--border); border-radius:12px; padding:18px; font-size:12.5px; color:var(--muted); overflow:auto; max-height:300px; display:none; white-space:pre-wrap; }
+
+  footer { padding:40px 0 60px; color:var(--dim); font-size:13px; border-top:1px solid var(--border); margin-top:60px; }
+  footer .wrap { display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px; }
+  footer a { color:var(--muted); text-decoration:none; }
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo"><span aria-hidden="true">Smartys<span class="dot">·</span><span class="glow">M3U Creator</span></span><a class="home" href="/">← player.smartys.tech</a></div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>Deine <span class="grad">M3U-Playlist</span> aus legalen Sendern.</h1>
+  <p class="lead">Wähle aus öffentlich-rechtlichen Sendern, lade die fertige M3U herunter — und teste Smartys IPTV ohne eigene Line. In jedem M3U-fähigen Player nutzbar.</p>
+</div></header>
+
+<div class="wrap">
+  <div class="notice">✅ <b>Nur legale, frei verfügbare Sender.</b> Alle Streams stammen von den öffentlich-rechtlichen Anstalten (ARD, ZDF, ARTE, phoenix, tagesschau24) und sind frei zugänglich. Keine privaten Lines, keine Zugangsdaten.</div>
+
+  <div class="creator">
+    <div class="head">
+      <h2>Sender auswählen</h2>
+      <button class="select-all" id="selectAll">Alle auswählen</button>
+    </div>
+    <div class="ch-grid" id="grid"></div>
+    <div class="actions">
+      <button class="btn gold" id="dl">M3U herunterladen</button>
+      <button class="btn ghost" id="copy">M3U anzeigen</button>
+      <span class="counter" id="counter"></span>
+    </div>
+    <pre class="out" id="out"></pre>
+  </div>
+</div>
+
+<footer><div class="wrap">
+  <div>© 2026 Smartys — smartys.tech</div>
+  <div>
+    <a href="https://panel.smartys.tech">Panel</a>
+    <a href="/" style="margin-left:18px;">Player</a>
+    <a href="/impressum.html" style="margin-left:18px;">Impressum</a>
+    <a href="/datenschutz.html" style="margin-left:18px;">Datenschutz</a>
+    <a href="/agb.html" style="margin-left:18px;">AGB</a>
+  </div>
+</div></footer>
+
+<script>
+const CHANNELS = [
+  {name:"Das Erste",    url:"https://daserste-live.ard-mcdn.de/daserste/live/hls/de/master.m3u8"},
+  {name:"ZDF",          url:"https://zdf-hls-15.akamaized.net/hls/live/2016498/de/med/master.m3u8"},
+  {name:"3sat",         url:"https://zdf-hls-18.akamaized.net/hls/live/2016501/dach/med/master.m3u8"},
+  {name:"ARTE",         url:"https://artesimulcast.akamaized.net/hls/live/2030993/artelive_de/master.m3u8"},
+  {name:"phoenix",      url:"https://zdf-hls-19.akamaized.net/hls/live/2016502/de/med/master.m3u8"},
+  {name:"tagesschau24", url:"https://tagesschau.akamaized.net/hls/live/2020115/tagesschau/tagesschau_1/master.m3u8"},
+  {name:"KiKA",         url:"https://kikageohls.akamaized.net/hls/live/2022693/livetvkika_de/master.m3u8"},
+  {name:"one",          url:"https://mcdn-one.ard.de/ardone/hls/master.m3u8"},
+  {name:"ZDFneo",       url:"https://zdf-hls-16.akamaized.net/hls/live/2016499/de/med/master.m3u8"},
+  {name:"ZDFinfo",      url:"https://zdf-hls-17.akamaized.net/hls/live/2016500/de/med/master.m3u8"},
+];
+
+const grid = document.getElementById("grid");
+CHANNELS.forEach((c, i) => {
+  const el = document.createElement("label");
+  el.className = "ch";
+  el.innerHTML = `<input type="checkbox" data-i="${i}" checked><span class="nm">${c.name}</span><span class="sd">SD</span>`;
+  el.querySelector("input").addEventListener("change", updateCounter);
+  grid.appendChild(el);
+});
+
+function selected() {
+  return [...grid.querySelectorAll("input:checked")].map(inp => CHANNELS[+inp.dataset.i]);
+}
+function buildM3u(list) {
+  let m3u = "#EXTM3U\n";
+  for (const c of list) {
+    m3u += `#EXTINF:-1 tvg-name="${c.name}" group-title="Smartys Demo (öffentlich-rechtlich)",${c.name}\n${c.url}\n`;
+  }
+  return m3u;
+}
+function updateCounter() {
+  const n = selected().length;
+  document.getElementById("counter").textContent = `${n} / ${CHANNELS.length} Sender gewählt`;
+}
+document.getElementById("selectAll").addEventListener("click", () => {
+  const allChecked = [...grid.querySelectorAll("input")].every(i => i.checked);
+  grid.querySelectorAll("input").forEach(i => i.checked = !allChecked);
+  document.getElementById("selectAll").textContent = allChecked ? "Alle auswählen" : "Keine auswählen";
+  updateCounter();
+});
+document.getElementById("dl").addEventListener("click", () => {
+  const list = selected();
+  if (!list.length) { alert("Bitte mindestens einen Sender auswählen."); return; }
+  const blob = new Blob([buildM3u(list)], {type:"audio/x-mpegurl"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "smartys-demo.m3u";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+document.getElementById("copy").addEventListener("click", () => {
+  const out = document.getElementById("out");
+  out.style.display = "block";
+  out.textContent = buildM3u(selected());
+});
+updateCounter();
+</script>
+</body>
+</html>
