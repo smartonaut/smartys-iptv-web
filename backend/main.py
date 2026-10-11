@@ -9,7 +9,7 @@ import secrets
 import json
 from pathlib import Path
 from fastapi import FastAPI, Request, Form, HTTPException, Depends
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 import db
@@ -57,6 +57,21 @@ def pair_page(request: Request, mac: str = "", pw: str = ""):
         "login.html",
         {"request": request, "error": None,
          "prefill_mac": mac, "prefill_pw": pw})
+
+
+@app.get("/qr")
+def qr_code(mac: str = "", pw: str = ""):
+    # QR-PNG für Enigma2/Desktop: encodiert die /pair-URL, damit die Box
+    # das Pairing ohne Abtippen anzeigen kann (wird per wget geladen).
+    import qrcode
+    import io
+    from urllib.parse import urlencode
+    target = "https://panel.smartys.tech/pair?" + urlencode({"mac": mac, "pw": pw})
+    img = qrcode.make(target, box_size=10, border=2)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return Response(content=buf.getvalue(), media_type="image/png")
 
 
 @app.post("/login")
