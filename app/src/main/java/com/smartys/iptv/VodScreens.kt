@@ -1,6 +1,7 @@
 package com.smartys.iptv
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -181,6 +182,14 @@ fun MovieGrid(
 @Composable
 fun MovieCard(movie: VodStream, onClick: () -> Unit, focusRequester: FocusRequester? = null) {
     var focused by remember { mutableStateOf(false) }
+    // TMDb-Poster-Fallback: kein stream_icon, aber tmdb-Id vorhanden -> Cover nachladen.
+    var tmdbPoster by remember(movie) { mutableStateOf<String?>(null) }
+    val posterUrl = movie.poster() ?: tmdbPoster
+    LaunchedEffect(movie) {
+        if (movie.poster() == null && !movie.tmdb.isNullOrBlank()) {
+            tmdbPoster = withContext(Dispatchers.IO) { TmdbMeta.posterUrl(movie.tmdb) }
+        }
+    }
     Column(
         Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -198,7 +207,7 @@ fun MovieCard(movie: VodStream, onClick: () -> Unit, focusRequester: FocusReques
                 )
         ) {
             AsyncImage(
-                model = movie.poster(),
+                model = posterUrl,
                 contentDescription = movie.name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
