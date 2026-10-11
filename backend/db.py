@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS providers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     label TEXT NOT NULL,
-    -- alles Folgende AES-256-GCM verschlüsselt:
+    -- alles Folgende AES-256-GCM verschlüsselt (Master-Key ODER Nutzer-Schlüssel):
     server_url TEXT NOT NULL,
     username TEXT NOT NULL,
     password TEXT NOT NULL,
@@ -58,6 +58,14 @@ CREATE INDEX IF NOT EXISTS idx_providers_player ON providers(player_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_player ON sessions(player_id);
 CREATE INDEX IF NOT EXISTS idx_tokens_player ON license_tokens(player_id);
 """
+
+# Migration: Sicherheits-Passwort-Spalten (Player-gebundenes Nutzer-Passwort).
+# sec_salt = PBKDF2-Salt (base64), sec_verify = AES-GCM-Token zum Prüfen des
+# Passworts OHNE es zu speichern. Beide leer => Player nutzt Master-Key-Layer.
+MIGRATIONS = [
+    ("players", "sec_salt", "TEXT NOT NULL DEFAULT ''"),
+    ("players", "sec_verify", "TEXT NOT NULL DEFAULT ''"),
+]
 
 
 def conn() -> sqlite3.Connection:
@@ -89,6 +97,12 @@ def normalize_mac(mac: str) -> str:
 def init_db():
     c = conn()
     c.executescript(SCHEMA)
+    # Spalten-Migration für Bestands-DBs (CREATE TABLE IF NOT EXISTS fügt
+    # keine neuen Spalten hinzu — ALTER TABLE schon).
+    for table, column, decl in MIGRATIONS:
+        cols = [r[1] for r in c.execute("PRAGMA table_info(%s)" % table)]
+        if column not in cols:
+            c.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, column, decl))
     c.commit()
 
 
@@ -204,24 +218,119 @@ def touch_player(mac: str):
     c.commit()
 
 
+# ---------- Sicherheits-Passwort (Nutzer-Schlüssel-Layer) ----------
+#
+# Ist für einen Player sec_salt/ sec_verify gesetzt, werden seine Provider
+# NUR mit dem vom Nutzer gewählten Passwort verschlüsselt. Der Server kennt
+# den Klartext dann NICHT mehr (kein Master-Key-Layer) — ohne das Passwort
+# ist die Line nicht wiederherstellbar (auch nicht für uns).
+
+SEC_VERIFY_PLAINTEXT = "smartys-sec-password-ok"
+
+
+def player_has_sec(mac: str) -> bool:
+    row = conn().execute("SELECT sec_salt FROM players WHERE mac=?", (mac,)).fetchone()
+    return bool(row and row["sec_salt"])
+
+
+def get_sec_salt(mac: str) -> str:
+    row = conn().execute("SELECT sec_salt FROM players WHERE mac=?", (mac,)).fetchone()
+    return (row["sec_salt"] if row else "")
+
+
+def verify_sec_password(mac: str, password: str):
+    """Prüft das Sicherheits-Passwort; Rückgabe (ok, key)."""
+    row = conn().execute("SELECT sec_salt, sec_verify FROM players WHERE mac=?",
+                         (mac,)).fetchone()
+    if not row or not row["sec_salt"] or not row["sec_verify"]:
+        return False, None
+    key = crypto.derive_user_key(password, row["sec_salt"])
+    plain = crypto.user_decrypt(key, row["sec_verify"], mac)
+    return plain == SEC_VERIFY_PLAINTEXT, key
+
+
+def set_sec_password(mac: str, password: str):
+    """Setzt/rotiert das Sicherheits-Passwort und re-verschlüsselt alle
+    bestehenden Provider (Master-Key -> Nutzer-Schlüssel). Rückgabe: key."""
+    salt = crypto.new_user_salt()
+    key = crypto.derive_user_key(password, salt)
+    verify_token = crypto.user_encrypt(key, SEC_VERIFY_PLAINTEXT, mac)
+    c = conn()
+    # Bestehende Provider vom Master-Key auf den Nutzer-Schlüssel umziehen.
+    rows = c.execute(
+        "SELECT id, server_url, username, password, epg_url FROM providers "
+        "WHERE player_id=(SELECT id FROM players WHERE mac=?)", (mac,)).fetchall()
+    for r in rows:
+        c.execute(
+            "UPDATE providers SET server_url=?, username=?, password=?, epg_url=? WHERE id=?",
+            (crypto.user_encrypt(key, crypto.decrypt(r["server_url"]), mac),
+             crypto.user_encrypt(key, crypto.decrypt(r["username"]), mac),
+             crypto.user_encrypt(key, crypto.decrypt(r["password"]), mac),
+             crypto.user_encrypt(key, crypto.decrypt(r["epg_url"]), mac),
+             r["id"]))
+    c.execute("UPDATE players SET sec_salt=?, sec_verify=? WHERE mac=?",
+              (salt, verify_token, mac))
+    c.commit()
+    return key
+
+
+def reset_sec_password(mac: str):
+    """'Passwort vergessen': Sicherheits-Passwort + ALLE Provider löschen
+    (die sind ohne Passwort unwiederbringlich). Line muss neu hinterlegt werden."""
+    c = conn()
+    c.execute("UPDATE players SET sec_salt='', sec_verify='' WHERE mac=?", (mac,))
+    c.execute("DELETE FROM providers WHERE player_id=(SELECT id FROM players WHERE mac=?)",
+              (mac,))
+    c.commit()
+
+
 # ---------- Provider (Xtream-Lines) pro Player ----------
 
-def add_provider(mac: str, label: str, url: str, user: str, pw: str, epg: str = "") -> int:
+class SecLocked(Exception):
+    """Player ist Nutzer-Schlüssel-verschlüsselt, aber es wurde kein
+    Passwort/Key mitgegeben. Aufrufer muss erst entsperren."""
+
+
+def _provider_key(mac: str, user_key):
+    """Layer-Key bestimmen: Nutzer-Schlüssel wenn gesetzt, sonst Master-Key."""
+    if player_has_sec(mac):
+        if user_key is None:
+            raise SecLocked()
+        return user_key
+    return None  # None => Master-Key (crypto.encrypt/decrypt)
+
+
+def add_provider(mac: str, label: str, url: str, user: str, pw: str,
+                 epg: str = "", user_key=None) -> int:
+    key = _provider_key(mac, user_key)
+    if key is not None:
+        enc = lambda s: crypto.user_encrypt(key, s, mac)  # noqa: E731
+    else:
+        enc = crypto.encrypt
     c = conn()
     cur = c.execute(
         "INSERT INTO providers (player_id, label, server_url, username, password, epg_url, created_at) "
         "VALUES ((SELECT id FROM players WHERE mac=?),?,?,?,?,?,?)",
-        (mac, label, crypto.encrypt(url), crypto.encrypt(user), crypto.encrypt(pw), crypto.encrypt(epg), int(time.time()))
+        (mac, label, enc(url), enc(user), enc(pw), enc(epg), int(time.time()))
     )
     c.commit()
     return cur.lastrowid
 
 
-def update_provider(provider_id: int, label: str, url: str, user: str, pw: str, epg: str, active: bool):
+def update_provider(provider_id: int, label: str, url: str, user: str, pw: str,
+                    epg: str, active: bool, user_key=None):
+    mac = conn().execute(
+        "SELECT p.mac FROM providers pr JOIN players p ON p.id=pr.player_id WHERE pr.id=?",
+        (provider_id,)).fetchone()["mac"]
+    key = _provider_key(mac, user_key)
+    if key is not None:
+        enc = lambda s: crypto.user_encrypt(key, s, mac)  # noqa: E731
+    else:
+        enc = crypto.encrypt
     c = conn()
     c.execute(
         "UPDATE providers SET label=?, server_url=?, username=?, password=?, epg_url=?, active=? WHERE id=?",
-        (label, crypto.encrypt(url), crypto.encrypt(user), crypto.encrypt(pw), crypto.encrypt(epg),
+        (label, enc(url), enc(user), enc(pw), enc(epg),
          1 if active else 0, provider_id)
     )
     c.commit()
@@ -233,8 +342,10 @@ def delete_provider(provider_id: int):
     c.commit()
 
 
-def list_providers(mac: str) -> list[dict]:
-    """Nur für authentifizierte Web-Session: entschlüsselt."""
+def list_providers(mac: str, user_key=None) -> list[dict]:
+    """Für authentifizierte Web-Session: entschlüsselt (Master ODER Nutzer-Key).
+    Wirft SecLocked, wenn der Player Nutzer-verschlüsselt ist und kein Key kam."""
+    key = _provider_key(mac, user_key)
     rows = conn().execute(
         "SELECT * FROM providers WHERE player_id=(SELECT id FROM players WHERE mac=?) ORDER BY sort_order, id",
         (mac,)
@@ -242,12 +353,30 @@ def list_providers(mac: str) -> list[dict]:
     out = []
     for r in rows:
         d = dict(r)
-        d["server_url"] = crypto.decrypt(d["server_url"])
-        d["username"] = crypto.decrypt(d["username"])
-        d["password"] = crypto.decrypt(d["password"])
-        d["epg_url"] = crypto.decrypt(d["epg_url"])
+        if key is not None:
+            d["server_url"] = crypto.user_decrypt(key, d["server_url"], mac)
+            d["username"] = crypto.user_decrypt(key, d["username"], mac)
+            d["password"] = crypto.user_decrypt(key, d["password"], mac)
+            d["epg_url"] = crypto.user_decrypt(key, d["epg_url"], mac)
+        else:
+            d["server_url"] = crypto.decrypt(d["server_url"])
+            d["username"] = crypto.decrypt(d["username"])
+            d["password"] = crypto.decrypt(d["password"])
+            d["epg_url"] = crypto.decrypt(d["epg_url"])
         out.append(d)
     return out
+
+
+def raw_providers(mac: str) -> list[dict]:
+    """Roh-Ciphertexte (Nutzer-Schlüssel-Layer) für die App-API: Die App
+    entschlüsselt lokal mit dem Nutzer-Passwort — der Server gibt die
+    verschlüsselten Felder 1:1 zurück und kennt den Klartext nie."""
+    rows = conn().execute(
+        "SELECT * FROM providers WHERE player_id=(SELECT id FROM players WHERE mac=?) "
+        "AND active=1 ORDER BY sort_order, id",
+        (mac,)
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ---------- Sessions ----------
