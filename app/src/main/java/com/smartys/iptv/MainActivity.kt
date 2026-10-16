@@ -16,6 +16,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -936,91 +939,185 @@ fun PairingScreen(vm: MainViewModel) {
     val pairingPw = remember { CredStore.pairingPw(appCtx) }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
+    var unlockInput by remember { mutableStateOf("") }
+    var unlockBusy by remember { mutableStateOf(false) }
     val checkFocus = androidx.compose.ui.focus.FocusRequester()
+    val unlockFocus = androidx.compose.ui.focus.FocusRequester()
 
-    // Beim Screen-Start: Fokus AUTOMATISCH auf den Pruefen-Button legen,
-    // damit D-Pad/OK (Fire-TV-Fernbedienung) sofort trifft.
-    // Kleiner Delay noetig: der Button komponiert erst nach dem ersten Frame.
-    LaunchedEffect(Unit) {
-        // Mehrere Versuche: Der Button komponiert erst nach dem ersten Frame,
-        // FocusRequester muss ATTACHED sein, bevor requestFocus() wirkt.
-        repeat(10) {
+    // Fokus automatisch: normal auf "Prüfen", im Unlock-Modus auf das
+    // Passwort-Feld — D-Pad/OK der Fire-TV-Fernbedienung trifft sofort.
+    // FokusRequester erst nach dem ersten Frame ATTACHED, daher Wiederholversuche.
+    LaunchedEffect(vm.unlockNeeded) {
+        repeat(15) {
             kotlinx.coroutines.delay(200)
-            val ok = runCatching { checkFocus.requestFocus() }.isSuccess
-            if (ok) return@LaunchedEffect
+            if (vm.unlockNeeded) {
+                if (runCatching { unlockFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            } else {
+                if (runCatching { checkFocus.requestFocus() }.isSuccess) return@LaunchedEffect
+            }
         }
     }
 
-    Column(
-        Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    // 2 Spalten statt durchgehendem Hochformat: Auf dem Cube (960×540dp)
+    // scrollte das alte Layout die Player-ID/PIN aus dem Bild, wenn der
+    // Fokus unten lag — MAC/Passwort waren nicht kontrollierbar.
+    // Jetzt liegt alles auf einem Blick, ohne Scrollen.
+    Row(
+        Modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 20.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Smarty Player", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
-        Spacer(Modifier.height(4.dp))
-        Text("Player freischalten", color = Color.Gray, fontSize = 15.sp)
-        Spacer(Modifier.height(28.dp))
-
-        // Player-ID + Passwort gross und deutlich (IBPlayer-Prinzip)
+        // ==================== LINKE SPALTE ====================
         Column(
-            Modifier.background(Color(0xFF10141F), RoundedCornerShape(14.dp)).padding(horizontal = 36.dp, vertical = 22.dp),
+            Modifier.weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Deine Player-ID", color = Color(0xFF8FA3C8), fontSize = 13.sp)
-            Text(playerId, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE8EEFC))
+            Text("Smarty Player", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
+            Spacer(Modifier.height(3.dp))
+            Text("Player freischalten", color = Color.Gray, fontSize = 13.sp)
             Spacer(Modifier.height(14.dp))
-            Text("Dein Passwort", color = Color(0xFF8FA3C8), fontSize = 13.sp)
-            Text(pairingPw, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
-        }
-        Spacer(Modifier.height(20.dp))
 
-        // QR-Code: scannen statt auf der Fernbedienung abtippen
-        QrCode(
-            "https://panel.smartys.tech/pair?mac=$playerId&pw=$pairingPw",
-            modifier = Modifier.width(220.dp).height(220.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.White).padding(12.dp)
-        )
-        Spacer(Modifier.height(14.dp))
-        Text("QR-Code mit dem Handy scannen", color = Color(0xFF8FA3C8), fontSize = 14.sp)
-        Spacer(Modifier.height(20.dp))
+            // Player-ID + Passwort groß und auf einer Zeile (IBPlayer-Prinzip)
+            Row(
+                Modifier.background(Color(0xFF10141F), RoundedCornerShape(14.dp)).padding(horizontal = 28.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(32.dp)
+            ) {
+                Column(Modifier.width(255.dp)) {
+                    Text("Deine Player-ID", color = Color(0xFF8FA3C8), fontSize = 12.sp)
+                    Text(playerId, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE8EEFC))
+                }
+                Column(Modifier.width(150.dp)) {
+                    Text("Dein Passwort", color = Color(0xFF8FA3C8), fontSize = 12.sp)
+                    Text(pairingPw, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
 
-        Text(
-            "1. QR-Code scannen und Playlist hinterlegen\n" +
-            "2. Oder manuell: panel.smartys.tech\n" +
-            "   mit Player-ID + Passwort anmelden\n" +
-            "3. Danach hier auf „Prüfen“ drücken",
-            color = Color(0xFF8FA3C8), fontSize = 15.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            lineHeight = 24.sp
-        )
-        Spacer(Modifier.height(22.dp))
+            Text(
+                "1. QR-Code scannen und Playlist hinterlegen\n" +
+                "2. Oder manuell: panel.smartys.tech mit Player-ID + Passwort\n" +
+                "3. Danach hier auf „Prüfen“ drücken",
+                color = Color(0xFF8FA3C8), fontSize = 13.sp,
+                lineHeight = 20.sp
+            )
+            Spacer(Modifier.height(16.dp))
 
-        if (busy) {
-            CircularProgressIndicator(color = Color(0xFFFFC94D))
-            msg?.let { Text(it, color = Color(0xFF8FA3C8), fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp)) }
-        } else {
-            Button(onClick = {
-                android.util.Log.d("SmartysIPTV", "Pruefen-Button geklickt, pairAndLoad startet")
-                busy = true; msg = "Verbinde mit panel.smartys.tech…"
-                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                    val ok = vm.pairAndLoad(playerId, pairingPw)
-                    android.util.Log.d("SmartysIPTV", "pairAndLoad Ergebnis: $ok")
-                    kotlinx.coroutines.withContext(Dispatchers.Main) {
-                        busy = false
-                        msg = when {
-                            ok -> "Playlist gefunden! Lade Kanäle…"
-                            else -> "Noch keine Playlist hinterlegt. Auf der Website einrichten, dann erneut prüfen."
+            // ==================== AKTION ====================
+            if (vm.unlockNeeded) {
+                // ------- Sicherheits-Passwort (Line im Panel ist verschlüsselt) -------
+                Text(
+                    "Line ist verschlüsselt — Sicherheits-Passwort eingeben",
+                    color = Color(0xFFE8EEFC), fontSize = 15.sp, fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "(das Passwort, mit dem die Playlist im Panel abgesichert wurde)",
+                    color = Color(0xFF8FA3C8), fontSize = 12.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                if (!unlockBusy) {
+                    OutlinedTextField(
+                        value = unlockInput,
+                        onValueChange = { unlockInput = it; vm.unlockError = "" },
+                        modifier = Modifier.width(340.dp).focusRequester(unlockFocus),
+                        singleLine = true,
+                        placeholder = { Text("Sicherheits-Passwort", fontSize = 14.sp) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFFFC94D),
+                            unfocusedBorderColor = Color(0xFF3A4358),
+                            focusedLabelColor = Color(0xFFFFC94D)
+                        ),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done
+                        )
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                if (unlockBusy) {
+                    Text("Entsperre…", color = Color(0xFF8FA3C8), fontSize = 14.sp)
+                } else {
+                    Button(onClick = {
+                        android.util.Log.d("SmartysIPTV", "Entsperren-Button geklickt")
+                        val pw = unlockInput
+                        if (pw.isEmpty()) { msg = "Bitte Sicherheits-Passwort eingeben."; return@Button }
+                        unlockBusy = true
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            // PBKDF2 (310k Iterationen) dauert kurz: auf IO-Rechner
+                            val ok = vm.unlockLine(pw)
+                            android.util.Log.d("SmartysIPTV", "unlockLine Ergebnis: $ok")
+                            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                unlockBusy = false
+                                if (!ok) {
+                                    msg = if (vm.unlockError.isNotEmpty()) "Passwort falsch oder ungültig — Line bleibt verschlüsselt."
+                                          else "Entsperren fehlgeschlagen."
+                                }
+                            }
                         }
+                    },
+                    modifier = Modifier.padding(top = 2.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC94D), contentColor = Color(0xFF0B0E14))) {
+                        Text("Entsperren — Line laden", Modifier.padding(horizontal = 26.dp, vertical = 6.dp), fontSize = 16.sp)
                     }
                 }
-            }, modifier = Modifier.focusRequester(checkFocus),
-               colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC94D), contentColor = Color(0xFF0B0E14))) {
-                Text("Prüfen — Playlist laden", Modifier.padding(horizontal = 26.dp, vertical = 6.dp), fontSize = 16.sp)
+                Spacer(Modifier.height(8.dp))
+                val m = msg
+                val statusText = when {
+                    busy -> "Verbinde mit panel.smartys.tech…"
+                    vm.unlockError.isNotEmpty() -> vm.unlockError
+                    m != null -> m
+                    else -> ""
+                }
+                if (statusText.isNotEmpty()) {
+                    val isError = vm.unlockError.isNotEmpty() || m?.startsWith("Passwort") == true
+                    Text(
+                        statusText,
+                        color = if (isError) Color(0xFFFF6B6B) else Color(0xFF8FA3C8),
+                        fontSize = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            } else {
+                if (busy) {
+                    CircularProgressIndicator(color = Color(0xFFFFC94D))
+                    msg?.let { Text(it, color = Color(0xFF8FA3C8), fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp)) }
+                } else {
+                    Button(onClick = {
+                        android.util.Log.d("SmartysIPTV", "Pruefen-Button geklickt, pairAndLoad startet")
+                        busy = true; msg = "Verbinde mit panel.smartys.tech…"
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            val ok = vm.pairAndLoad(playerId, pairingPw)
+                            android.util.Log.d("SmartysIPTV", "pairAndLoad Ergebnis: $ok")
+                            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                busy = false
+                                // verschlüsselte Line empfangen -> unlockNeeded wird
+                                // gesetzt, UI blendet den Passwort-Prompt ein
+                                if (!ok && !vm.unlockNeeded) {
+                                    msg = "Noch keine Playlist hinterlegt. Auf der Website einrichten, dann erneut prüfen."
+                                }
+                            }
+                        }
+                    }, modifier = Modifier.focusRequester(checkFocus),
+                       colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC94D), contentColor = Color(0xFF0B0E14))) {
+                        Text("Prüfen — Playlist laden", Modifier.padding(horizontal = 26.dp, vertical = 6.dp), fontSize = 16.sp)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    msg?.let { Text(it, color = Color(0xFF8FA3C8), fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
+                }
             }
-            Spacer(Modifier.height(8.dp))
-            msg?.let { Text(it, color = Color(0xFF8FA3C8), fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
         }
 
+        Spacer(Modifier.width(36.dp))
+
+        // ==================== RECHTE SPALTE: QR ====================
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            QrCode(
+                "https://panel.smartys.tech/pair?mac=$playerId&pw=$pairingPw",
+                modifier = Modifier.width(240.dp).height(240.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White).padding(12.dp)
+            )
+            Spacer(Modifier.height(10.dp))
+            Text("QR-Code mit dem Handy scannen", color = Color(0xFF8FA3C8), fontSize = 13.sp)
+        }
     }
 }
 
@@ -1041,6 +1138,11 @@ fun ChannelGrid(
     onOpenEpg: () -> Unit = {}
 ) {
     val appCtx = androidx.compose.ui.platform.LocalContext.current
+    // Responsiv: Fire TV Cube meldet 1920x1080 @ 320dpi => nur ~960x540dp effektiv.
+    // Feste dp-Werte (300dp Sidebar etc.) sind da viel zu groß. Compact-Modus
+    // skaliert die Elemente herunter, damit mehrere Sender sichtbar sind.
+    val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+    val compact = cfg.screenWidthDp < 1000
     var favMode by remember { mutableStateOf(false) }
     // Sortier-Modus + Kanal-Langdruck-Menü + FSK18-PIN-Sperre
     var sortMode by remember { mutableStateOf(ChannelPrefs.sortMode(appCtx)) }
@@ -1093,21 +1195,21 @@ fun ChannelGrid(
         // ---- Kategorien-Sidebar (002-Stil: Aktiv = Gold + linker Balken) ----
         LazyColumn(
             state = catListState,
-            modifier = Modifier.width(300.dp).fillMaxHeight()
-                .background(Color(0xFF11172A)).padding(vertical = 14.dp)
+            modifier = Modifier.width(if (compact) 190.dp else 300.dp).fillMaxHeight()
+                .background(Color(0xFF11172A)).padding(vertical = if (compact) 8.dp else 14.dp)
         ) {
             item {
-                CategoryItem("Alle Kanäle", selectedCategory == null && !favMode, onClick = { categoryClicked(null, false) })
-                CategoryItem("Favoriten (${vm.favorites.size})", favMode, onClick = { categoryClicked(null, true) })
+                CategoryItem("Alle Kanäle", selectedCategory == null && !favMode, onClick = { categoryClicked(null, false) }, compact = compact)
+                CategoryItem("Favoriten (${vm.favorites.size})", favMode, onClick = { categoryClicked(null, true) }, compact = compact)
                 Spacer(Modifier.height(8.dp))
             }
             items(categories) { cat ->
-                CategoryItem(cat.name, selectedCategory == cat.id, onClick = { categoryClicked(cat.id, false) })
+                CategoryItem(cat.name, selectedCategory == cat.id, onClick = { categoryClicked(cat.id, false) }, compact = compact)
             }
         }
 
         // ---- Hauptbereich ----
-        Column(Modifier.weight(1f).padding(horizontal = 32.dp, vertical = 20.dp)) {
+        Column(Modifier.weight(1f).padding(horizontal = if (compact) 18.dp else 32.dp, vertical = if (compact) 12.dp else 20.dp)) {
             // Kopfzeile: Such-Pill rechts (002-Stil)
             // WICHTIG: Suche ist NUR per OK-Klick aktivierbar. Fokus (D-Pad) darf das Feld
             // NICHT sofort oeffnen (Fire-TV-Tastatur-Problem). Erst Klick => Tastatur.
@@ -1117,7 +1219,7 @@ fun ChannelGrid(
                 Column(Modifier.weight(1f)) {
                     Text(
                         if (favMode) "Favoriten" else categories.firstOrNull { it.id == selectedCategory }?.name ?: "Alle Kanäle",
-                        color = Color(0xFFE8EEFC), fontSize = 24.sp, fontWeight = FontWeight.Bold
+                        color = Color(0xFFE8EEFC), fontSize = if (compact) 18.sp else 24.sp, fontWeight = FontWeight.Bold
                     )
                 }
 
@@ -1127,7 +1229,7 @@ fun ChannelGrid(
                         value = searchQuery, onValueChange = onSearch,
                         placeholder = { Text("Kanal suchen…", color = Color(0xFF6B7A99)) },
                         modifier = Modifier
-                            .width(340.dp)
+                            .width(if (compact) 220.dp else 340.dp)
                             .focusRequester(searchFieldFocus)
                             .onFocusChanged { searchFocused = it.isFocused },
                         singleLine = true,
@@ -1146,7 +1248,7 @@ fun ChannelGrid(
                         border = androidx.compose.foundation.BorderStroke(
                             1.dp, if (searchFocused) Color(0xFFFFC94D) else Color(0xFF232C42)
                         ),
-                        modifier = Modifier.width(340.dp)
+                        modifier = Modifier.width(if (compact) 220.dp else 340.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1227,7 +1329,8 @@ fun ChannelGrid(
                         onToggleFav = { vm.toggleFavorite(ch.streamId) },
                         vm = vm,
                         onLongPress = { channelMenuFor = ch },
-                        focusOnAppear = if (shown.indexOfFirst { it.streamId == ch.streamId } == 0) firstRowFocus else null
+                        focusOnAppear = if (shown.indexOfFirst { it.streamId == ch.streamId } == 0) firstRowFocus else null,
+                        compact = compact
                     )
                 }
             }
@@ -1373,7 +1476,7 @@ fun ChannelGrid(
 }
 
 @Composable
-fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit, focusRequester: FocusRequester? = null) {
+fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit, focusRequester: FocusRequester? = null, compact: Boolean = false) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         // Aktiv: DEUTLICH dunkler als die Sidebar (fast schwarz) => klar erkennbar
@@ -1403,8 +1506,8 @@ fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit, focusRequ
                     focused -> Color(0xFFE8EEFC)
                     else -> Color(0xFF8FA3C8)
                 },
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                fontSize = 15.sp,
+                modifier = Modifier.padding(horizontal = if (compact) 14.dp else 20.dp, vertical = if (compact) 6.dp else 10.dp),
+                fontSize = if (compact) 13.sp else 15.sp,
                 fontWeight = if (selected || focused) FontWeight.Bold else FontWeight.Normal,
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
@@ -1423,7 +1526,8 @@ fun ChannelRow(
     onToggleFav: () -> Unit,
     vm: MainViewModel,
     onLongPress: () -> Unit = {},
-    focusOnAppear: FocusRequester? = null
+    focusOnAppear: FocusRequester? = null,
+    compact: Boolean = false
 ) {
     var focused by remember { mutableStateOf(false) }
 
@@ -1454,40 +1558,40 @@ fun ChannelRow(
             .onFocusChanged { focused = it.isFocused }
             .combinedClickable(onClick = onPlay, onLongClick = onLongPress)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = if (compact) 12.dp else 16.dp, vertical = if (compact) 6.dp else 10.dp)) {
             // Kanalnummer (002-Stil: rechtsbündig, gedämpft)
             Text(
                 "${channel.num ?: ""}",
-                color = Color(0xFF55648A), fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.width(56.dp),
+                color = Color(0xFF55648A), fontSize = if (compact) 14.sp else 17.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(if (compact) 42.dp else 56.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.End
             )
-            Spacer(Modifier.width(18.dp))
+            Spacer(Modifier.width(if (compact) 12.dp else 18.dp))
             AsyncImage(
                 model = channel.streamIcon,
                 contentDescription = null,
                 modifier = Modifier
-                    .size(width = 92.dp, height = 52.dp)
+                    .size(width = if (compact) 68.dp else 92.dp, height = if (compact) 38.dp else 52.dp)
                     .background(Color(0xFF141A2A), MaterialTheme.shapes.small)
                     .padding(4.dp),
                 contentScale = ContentScale.Fit
             )
-            Spacer(Modifier.width(20.dp))
+            Spacer(Modifier.width(if (compact) 14.dp else 20.dp))
             Column(Modifier.weight(1f)) {
-                Text(channel.name, color = Color(0xFFE8EEFC), fontSize = 17.sp,
+                Text(channel.name, color = Color(0xFFE8EEFC), fontSize = if (compact) 15.sp else 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 when {
                     epgText != null -> Text(
                         epgText,
-                        color = if (focused) Color(0xFFFFC94D) else Color(0xFF7D8BA8), fontSize = 13.sp,
+                        color = if (focused) Color(0xFFFFC94D) else Color(0xFF7D8BA8), fontSize = if (compact) 12.sp else 13.sp,
                         maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                     else -> Text("", fontSize = 13.sp)
                 }
             }
             TextButton(onClick = onToggleFav) {
-                Text(if (isFav) "★" else "☆", fontSize = 22.sp,
+                Text(if (isFav) "★" else "☆", fontSize = if (compact) 19.sp else 22.sp,
                     color = if (isFav) Color(0xFFFFC94D) else Color(0xFF4D5B78))
             }
         }
@@ -1509,6 +1613,27 @@ fun PlayerScreen(
     var showReplay by remember { mutableStateOf(false) }
     val xmltvReady = vm.xmltvReady.value
     val epgInfo = remember(channel.streamId, xmltvReady) { vm.nowNext(channel) }
+
+    // ---- Aufnahme (Menu-Taste) ----
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    var recording by remember { mutableStateOf(Recorder.active()) }
+    var showMenu by remember { mutableStateOf(false) }
+
+    fun toggleRecording() {
+        if (recording) {
+            Recorder.stop()
+            recording = false
+        } else {
+            val url = vm.tsUrlFor(channel)
+            if (url != null) {
+                val name = "${channel.name.replace(Regex("[^A-Za-z0-9äöüÄÖÜß _-]"), "_")}-${System.currentTimeMillis()}"
+                val f = Recorder.start(appCtx, url, channel.name, name)
+                recording = f != null
+            }
+        }
+        showMenu = false
+        showOverlay = true
+    }
 
     // ---- Kanalnummer-Direkteingabe: Ziffern tippen, 1.5s nach letzter Ziffer schaltet der Player ----
     var numInput by remember { mutableStateOf("") }
@@ -1564,6 +1689,7 @@ fun PlayerScreen(
                     }
                     Key.DirectionCenter, Key.Enter -> { showOverlay = !showOverlay; true }
                     Key.Back, Key.Escape -> { onBack(); true }
+                    Key.Menu -> { showMenu = !showMenu; true }
                     else -> false
                 }
             }
@@ -1605,6 +1731,16 @@ fun PlayerScreen(
                     Column {
                         Row(verticalAlignment = Alignment.Bottom) {
                             Text(channel.name, color = Color(0xFFE8EEFC), fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            if (recording) {
+                                Spacer(Modifier.width(14.dp))
+                                Text(
+                                    "● REC",
+                                    color = Color(0xFFFFFFFF), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                    modifier = Modifier
+                                        .background(Color(0xFFCC2222), MaterialTheme.shapes.extraLarge)
+                                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                                )
+                            }
                             if (numInput.isNotEmpty()) {
                                 Spacer(Modifier.width(14.dp))
                                 Text(
@@ -1719,6 +1855,54 @@ fun PlayerScreen(
                 },
                 onClose = { showReplay = false }
             )
+        }
+
+        // ---- Kontextmenü (Menu-Taste): Aufnahme starten/stoppen ----
+        if (showMenu) {
+            Box(Modifier.fillMaxSize().background(Color(0x80000000))) {
+                Column(
+                    Modifier
+                        .align(Alignment.Center)
+                        .width(420.dp)
+                        .background(Color(0xFF10141F), MaterialTheme.shapes.large)
+                        .padding(16.dp)
+                ) {
+                    Text("Menü", color = Color(0xFF6B7A99), fontSize = 13.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Surface(
+                        onClick = { toggleRecording() },
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (recording) Color(0xFF2A1A1A) else Color(0xFF141A2A),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (recording) Color(0xFFFF6B6B) else Color(0xFFFFC94D)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (recording) "⏹ Aufnahme stoppen" else "● Aufnahme starten",
+                            color = if (recording) Color(0xFFFF9B9B) else Color(0xFFFFC94D),
+                            fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Surface(
+                        onClick = { showMenu = false },
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF141A2A),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Schließen",
+                            color = Color(0xFF8FA3C8),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
