@@ -88,6 +88,16 @@ object CategoryPrefs {
         val ctx = AppCtx.get() ?: return
         prefs(ctx).edit().putStringSet(K_HIDDEN.format(scope), emptySet()).apply()
     }
+    /** Setzt die komplette Kategorieverwaltung (Reihenfolge, Ausblenden, eigene Namen) eines Bereichs zurueck. */
+    fun resetAll(scope: String) {
+        val ctx = AppCtx.get() ?: return
+        val p = prefs(ctx)
+        val edit = p.edit()
+        edit.remove(K_ORDER.format(scope))
+        edit.remove(K_HIDDEN.format(scope))
+        p.all.keys.filter { it.startsWith("rename_${scope}_") }.forEach { edit.remove(it) }
+        edit.apply()
+    }
 
     fun hideMany(scope: String, catIds: List<String>) {
         if (catIds.isEmpty()) return
@@ -123,6 +133,12 @@ object CategoryPrefs {
         val ctx = AppCtx.get() ?: return false
         val hidden = prefs(ctx).getStringSet(K_HIDDEN.format(scope), emptySet()) ?: emptySet()
         return catId in hidden
+    }
+
+    /** Menge aller ausgeblendeten Kategorie-IDs eines Bereichs (einmalig lesen, für List-Filter). */
+    fun hiddenIds(scope: String): Set<String> {
+        val ctx = AppCtx.get() ?: return emptySet()
+        return prefs(ctx).getStringSet(K_HIDDEN.format(scope), emptySet()) ?: emptySet()
     }
 
     /** Aktuelle Order-IDs inkl. hidden (damit moveUp/Down auch ausgeblendete Treffer sauber behandelt). */

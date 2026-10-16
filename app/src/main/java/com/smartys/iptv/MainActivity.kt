@@ -1,6 +1,11 @@
 package com.smartys.iptv
 
+import android.content.Context
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.Stroke
 import android.os.Bundle
+import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -663,7 +668,7 @@ fun VodPlayerScreen(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .padding(28.dp)
-                    .width(640.dp)
+                    .widthIn(max = 640.dp)
                     .background(Color(0xE60B0E14), MaterialTheme.shapes.large)
                     .padding(horizontal = 28.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -710,226 +715,346 @@ fun VodPlayerScreen(
 // ---------- Einstellungen ----------
 
 @Composable
-fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -> Unit = {}) {
-    val appCtx = androidx.compose.ui.platform.LocalContext.current
-    var playerId by remember { mutableStateOf("Lade…") }
-    var pairingPw by remember { mutableStateOf<String?>(null) }
-    var cacheSize by remember { mutableStateOf("") }
-    var supportText by remember { mutableStateOf("") }
-    var supportState by remember { mutableStateOf<String?>(null) }  // null=Formular, sonst Meldung
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val profileName = ProfileStore.active(ctx)?.name
+    val playName = (profileName ?: "Dieser Player")
+    val ps = ctx.getSharedPreferences("smartys_panel", Context.MODE_PRIVATE)
+    val playerId = ProfileStore.activeId(ctx)
+    val panelUrl = ps.getString("host", "").orEmpty()
+    val panelPairUrl = panelUrl.trimEnd('/') + "/pair"
 
-    // Aktives Profil für die Anzeige
-    var activeProfile by remember { mutableStateOf<Profile?>(null) }
-    LaunchedEffect(Unit) { activeProfile = ProfileStore.active(appCtx) }
-
-    // Generierte Player-ID + Pairing-Passwort (Geraet-generiert, IBPlayer-Modell)
-    LaunchedEffect(Unit) {
-        playerId = CredStore.playerId(appCtx)
-        pairingPw = CredStore.pairingPw(appCtx)
+    val recDir = File(ctx.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES), "Aufnahmen")
+    val cacheDir = ctx.cacheDir
+    val logoDir = File(ctx.filesDir, "logos")
+    val dlDir = File(ctx.filesDir, "downloads")
+    var cacheWarn by remember { mutableStateOf(false) }
+    var storageTick by remember { mutableStateOf(0) }
+    var lookback by remember { mutableStateOf(PlayPrefs.lookback(ctx)) }
+    val recs = remember(storageTick) {
+        if (recDir.exists()) recDir.listFiles()?.filter { it.length() > 0 }
+            ?.sortedByDescending { it.lastModified() } ?: emptyList()
+        else emptyList()
     }
 
-    // Cache-Groesse berechnen (EPG-XML + Logo-Diskcache)
-    fun refreshCacheSize() {
-        cacheSize = try {
-            var bytes = 0L
-            val dirs = listOf(appCtx.filesDir, java.io.File(appCtx.cacheDir, "image_cache"),
-                java.io.File(appCtx.filesDir, "coil"), appCtx.cacheDir)
-            for (d in dirs) d?.walkTopDown()?.forEach { f -> if (f.isFile) bytes += f.length() }
-            "${bytes / 1024 / 1024} MB"
-        } catch (e: Exception) { "?" }
+    fun dirBytes(d: File): Long {
+        if (!d.exists()) return 0L
+        return d.walkTopDown().filter { it.isFile }.sumOf { it.length() }
     }
-    LaunchedEffect(Unit) { refreshCacheSize() }
+    fun mb(l: Long) = String.format(java.util.Locale.GERMAN, "%.1f MB", l / 1048576.0)
 
-    // Player-Status vom Backend holen (aktiviert? freigeschaltet?) — auf IO
-    var playerStatus by remember { mutableStateOf<Pair<Boolean, Boolean>?>(null) }  // (exists, active)
-    LaunchedEffect(playerId) {
-        if (playerId == "Lade…") return@LaunchedEffect
-        playerStatus = kotlinx.coroutines.withTimeoutOrNull(10000L) {
-            kotlinx.coroutines.withContext(Dispatchers.IO) {
-                vm.fetchPlayerStatus(playerId)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize()
+            .padding(horizontal = 32.dp, vertical = 28.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
+        item {
+            Text("Einstellungen", color = Color(0xFFE8EEFC), fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        }
+
+        item {
+            Section("Profil") {
+                InfoRow("Aktives Profil", playName)
+                Spacer(Modifier.height(10.dp))
+                BtnSmall("Profil wechseln (alle Profile)") { onSwitchProfile() }
             }
         }
-    }
 
-    Box(Modifier.fillMaxSize().background(Color(0xFF0B0E14))) {
-        Column(Modifier.fillMaxSize().padding(48.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Einstellungen", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE8EEFC))
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = onClose) { Text("← Zurück", color = Color(0xFF8FA3C8), fontSize = 16.sp) }
-            }
-            Spacer(Modifier.height(28.dp))
-
-            // ---- Profile ----
-            Section("Profile") {
-                InfoRow("Aktives Profil", activeProfile?.name ?: "—")
-                TextButton(onClick = onSwitchProfile, modifier = Modifier.align(Alignment.Start)) {
-                    Text("Profil wechseln", color = Color(0xFFFFC94D), fontSize = 14.sp)
-                }
-            }
-            Spacer(Modifier.height(18.dp))
-
-            // ---- Mein Player (Pairing) ----
+        item {
             Section("Mein Player") {
-                InfoRow("Player-ID", playerId)
-                val statusText = when {
-                    playerStatus == null -> "wird geprüft…"
-                    playerStatus?.first == false -> "noch nicht registriert — Website-Login registriert dich"
-                    playerStatus?.second == true -> "✓ aktiv"
-                    else -> "gesperrt — Support kontaktieren"
-                }
-                InfoRow("Status", statusText)
-                Text(
-                    "Mit Player-ID und Pairing-Passwort meldest du dich auf panel.smartys.tech an. " +
-                    "Das Passwort erhältst du vom Support.",
-                    color = Color(0xFF6B7A99), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)
-                )
-            }
-            Spacer(Modifier.height(18.dp))
-
-            // ---- Speicher ----
-            Section("Speicher") {
-                InfoRow("Cache-Größe (EPG + Logos)", cacheSize)
-                Row {
-                    TextButton(onClick = {
-                        // EPUG/Logo-Cache loeschen
-                        try {
-                            java.io.File(appCtx.filesDir, "xmltv.xml").delete()
-                            java.io.File(appCtx.filesDir, "epg_pw_de.xml").delete()
-                            appCtx.cacheDir?.walkTopDown()?.forEach { f -> if (f.isFile) f.delete() }
-                            vm.clearEpg()
-                            refreshCacheSize()
-                        } catch (_: Exception) {}
-                    }) { Text("Cache löschen", color = Color(0xFFFFC94D), fontSize = 14.sp) }
-                }
-            }
-            Spacer(Modifier.height(18.dp))
-
-            // ---- Downloads (VOD lokal) ----
-            Section("Downloads") {
-                val downloads = VodDownloader.items
-                if (downloads.isEmpty()) {
-                    Text("Noch keine Downloads. In der Filmdetailseite „⬇ Herunterladen“ wählen.", color = Color(0xFF6B7A99), fontSize = 13.sp)
-                } else {
-                    downloads.forEach { d ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Column(Modifier.weight(1f)) {
-                                Text(d.title, color = Color(0xFFE8EEFC), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    when (d.status) {
-                                        "complete" -> "✓ fertig (${d.downloadedBytes / 1024 / 1024} MB)"
-                                        "running" -> "lädt… ${(d.progress * 100).toInt()}%"
-                                        "paused" -> "pausiert (${(d.progress * 100).toInt()}%)"
-                                        else -> "Fehler: ${d.error ?: "unbekannt"}"
-                                    },
-                                    color = Color(0xFF6B7A99), fontSize = 12.sp
-                                )
+                val onPanel = panelUrl.isNotBlank() && playerId != null
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Diese Box", color = Color(0xFF8FA3C8), fontSize = 12.sp)
+                        Text(playName, color = Color(0xFFE8EEFC), fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (playerId != null) {
+                            Text("ID: $playerId", color = Color(0xFF6B7A99), fontSize = 12.sp)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                            Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(
+                                if (onPanel) Color(0xFF4ADE80) else Color(0xFF6B7A99)))
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (onPanel) "Verbunden mit Panel" else "Nicht mit Panel verknüpft",
+                                color = if (onPanel) Color(0xFF8FA3C8) else Color(0xFFFFB74D), fontSize = 13.sp)
+                        }
+                    }
+                    // QR-Code: neu gekoppelt, wenn die Box nicht im Panel erscheint
+                    if (onPanel) {
+                        Spacer(Modifier.width(20.dp))
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                Modifier.size(140.dp).background(Color.White, shape = RoundedCornerShape(8.dp))
+                                    .padding(8.dp)
+                            ) {
+                                QrCode(panelPairUrl, size = 124.dp)
                             }
-                            if (d.status == "running") {
-                                TextButton(onClick = { VodDownloader.pause(d.id) }) { Text("Pause", color = Color(0xFFFFC94D), fontSize = 13.sp) }
-                            } else if (d.status == "paused") {
-                                TextButton(onClick = { VodDownloader.resume(appCtx, d.id) }) { Text("Fortsetzen", color = Color(0xFF6FCF9F), fontSize = 13.sp) }
-                            }
-                            TextButton(onClick = { VodDownloader.delete(appCtx, d.id) }) { Text("Löschen", color = Color(0xFFFF6B6B), fontSize = 13.sp) }
+                            Text("Neu koppeln: QR scannen (Panel → Player)",
+                                color = Color(0xFF6B7A99), fontSize = 10.sp)
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(18.dp))
+        }
 
-            // ---- Kindersicherung ----
+        item {
+            Section("Speicher & Cache") {
+                val cacheBytesTotal = dirBytes(cacheDir) + dirBytes(logoDir)
+                val dlBytesTotal = dirBytes(dlDir)
+                InfoRow("Cache (EPG + Logos)", mb(cacheBytesTotal))
+                InfoRow("Downloads (Serien)", mb(dlBytesTotal))
+                Text("EPG, Logos und heruntergeladene Serien werden lokal gespeichert.",
+                    color = Color(0xFF6B7A99), fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    BtnSmall("Cache & Logos löschen", danger = true) {
+                        try { cacheDir.deleteRecursively(); logoDir.deleteRecursively() } catch (_: Exception) {}
+                        storageTick++
+                    }
+                    BtnSmall("Downloads löschen", danger = true) {
+                        try { dlDir.deleteRecursively() } catch (_: Exception) {}
+                        storageTick++
+                    }
+                }
+            }
+        }
+
+        item {
+            Section("Aufnahmen & Timeshift") {
+                // Timeshift: wie weit zurueck bei pausiertem Live-TV
+                Text("Timeshift (Live-Pause: Zurueckspulen)", color = Color(0xFFE8EEFC), fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    BtnSmall("Standard (auto)", selected = lookback == 0L) {
+                        lookback = 0L; PlayPrefs.setLookback(ctx, 0L)
+                    }
+                    BtnSmall("15 Min", selected = lookback == 900_000L) {
+                        lookback = 900_000L; PlayPrefs.setLookback(ctx, 900_000L)
+                    }
+                    BtnSmall("30 Min", selected = lookback == 1_800_000L) {
+                        lookback = 1_800_000L; PlayPrefs.setLookback(ctx, 1_800_000L)
+                    }
+                    BtnSmall("60 Min", selected = lookback == 3_600_000L) {
+                        lookback = 3_600_000L; PlayPrefs.setLookback(ctx, 3_600_000L)
+                    }
+                }
+                Text("Gruesser = laengeres Puffern beim Live-TV. NUR auf dieser Box lokal.",
+                    color = Color(0xFF6B7A99), fontSize = 12.sp)
+                Spacer(Modifier.height(14.dp))
+                // vorhandene Aufnahmen verwalten
+                if (recs.isEmpty()) {
+                    Text("Noch keine Aufnahmen.", color = Color(0xFF6B7A99), fontSize = 13.sp)
+                } else {
+                    val fmt = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.GERMAN)
+                    recs.take(6).forEach { f ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(f.nameWithoutExtension, color = Color(0xFFE8EEFC), fontSize = 14.sp,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(fmt.format(java.util.Date(f.lastModified())) + " · " + mb(f.length()),
+                                    color = Color(0xFF6B7A99), fontSize = 12.sp)
+                            }
+                            BtnSmall("Löschen", danger = true) {
+                                scope.launch(Dispatchers.IO) {
+                                    runCatching { f.delete() }
+                                    kotlinx.coroutines.withContext(Dispatchers.Main) { storageTick++ }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (recs.size > 6) Text("… und " + (recs.size - 6) + " weitere in: Aufnahmen",
+                        color = Color(0xFF6B7A99), fontSize = 12.sp)
+                }
+                Spacer(Modifier.height(8.dp))
+                BtnSmall("Alle Aufnahmen löschen", danger = true) {
+                    scope.launch(Dispatchers.IO) {
+                        runCatching { recDir.deleteRecursively() }
+                        kotlinx.coroutines.withContext(Dispatchers.Main) { storageTick++ }
+                    }
+                }
+            }
+        }
+
+        item {
             Section("Kindersicherung") {
                 PinSettings()
             }
-            Spacer(Modifier.height(18.dp))
+        }
 
-            // ---- Support ----
-            Section("Support") {
-                if (supportState != null) {
-                    Text(supportState!!, color = Color(0xFF6FCF9F), fontSize = 14.sp)
-                } else {
-                    OutlinedTextField(
-                        value = supportText, onValueChange = { supportText = it },
-                        placeholder = { Text("Beschreibe dein Problem…", color = Color(0xFF6B7A99)) },
-                        modifier = Modifier.fillMaxWidth().height(110.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFF232C42),
-                            focusedBorderColor = Color(0xFFFFC94D)
-                        )
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    TextButton(
-                        enabled = supportText.isNotBlank(),
-                        onClick = {
-                            supportState = "Sende…"
-                            scope.launch(Dispatchers.IO) {
-                                val ok = vm.sendSupport(playerId, supportText)
-                                supportState = if (ok)
-                                    "✓ Anfrage gesendet — wir melden uns per E-Mail."
-                                else
-                                    "✗ Versand fehlgeschlagen — bitte später erneut versuchen."
-                            }
-                        }
-                    ) { Text("Absenden", color = Color(0xFFFFC94D), fontSize = 14.sp) }
+        item {
+            Section("Kategorien & Sortierung") {
+                Text(
+                    "Live-TV:\n" +
+                    "• Menü-Taste (oder Langdruck) auf einer Kategorie = Sortieren · Ausblenden · Umbenennen.\n" +
+                    "• Kanäle: Menü-Taste = Verschieben · FSK18 · Ausblenden.\n" +
+                    "• Sortierreihenfolge oben links: Nummer / A–Z / Manuell.",
+                    color = Color(0xFF8FA3C8), fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    BtnSmall("Live-Kategorien zurücksetzen") {
+                        CategoryPrefs.resetAll("live")
+                        storageTick++
+                    }
+                    BtnSmall("Kanal-Verwaltung zurücksetzen (FSK/Sortierung/Sichtbarkeit)") {
+                        ChannelPrefs.resetAll(ctx)
+                        storageTick++
+                    }
                 }
             }
-            Spacer(Modifier.height(18.dp))
-            Text(
-                "Smarty Player v0.3 · panel.smartys.tech",
-                color = Color(0xFF4D5B78), fontSize = 11.sp
-            )
+        }
+
+        item {
+            Section("Support") {
+                Text("Kontakt:", color = Color(0xFF8FA3C8), fontSize = 13.sp)
+                Spacer(Modifier.height(8.dp))
+                BtnSmall("support@smartys.tech") {
+                    scope.launch {
+                        runCatching {
+                            ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("mailto:support@smartys.tech")))
+                        }
+                    }
+                }
+                BtnSmall("panel.smartys.tech") {
+                    scope.launch {
+                        runCatching {
+                            ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(panelUrl.ifBlank { "http://192.168.4.136:884/panel" })))
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(4.dp))
+            Text("Smarty Player v0.8.0 (Build 20) · panel.smartys.tech · Kontakt: support@smartys.tech",
+                color = Color(0xFF4A5878), fontSize = 12.sp)
         }
     }
 }
 
 @Composable
-fun Section(title: String, content: @Composable () -> Unit) {
+private fun Section(title: String, content: @Composable () -> Unit) {
     Column(
         Modifier.fillMaxWidth()
-            .background(Color(0xFF11172A), MaterialTheme.shapes.large)
-            .padding(24.dp)
+            .background(Color(0xFF141A2A), shape = RoundedCornerShape(14.dp))
+            .padding(18.dp)
     ) {
-        Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
-        Spacer(Modifier.height(12.dp))
+        Text(title, color = Color(0xFF8FA3C8), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
         content()
     }
 }
 
 @Composable
-fun InfoRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(label, color = Color(0xFF8FA3C8), fontSize = 14.sp, modifier = Modifier.width(280.dp))
-        Text(value, color = Color(0xFFE8EEFC), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+private fun InfoRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = Color(0xFF8FA3C8), fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text(value, color = Color(0xFFE8EEFC), fontSize = 13.sp)
     }
-}
-
-// ---------- Login ----------
-// ---------- Pairing (IBPlayer-Start) ----------
-
-fun qrCodeBitmap(content: String, size: Int = 512): android.graphics.Bitmap {
-    val matrix = com.google.zxing.qrcode.QRCodeWriter().encode(
-        content, com.google.zxing.BarcodeFormat.QR_CODE, size, size)
-    val pixels = IntArray(size * size)
-    for (y in 0 until size) {
-        for (x in 0 until size) {
-            // dunkles Modul auf hellem Grund (gut scannbar)
-            pixels[y * size + x] = if (matrix[x, y]) 0xFF10141F.toInt() else 0xFFFFFFFF.toInt()
-        }
-    }
-    return android.graphics.Bitmap.createBitmap(
-        size, size, android.graphics.Bitmap.Config.ARGB_8888
-    ).apply { setPixels(pixels, 0, size, 0, 0, size, size) }
 }
 
 @Composable
-fun QrCode(content: String, modifier: Modifier = Modifier) {
-    val bitmap = remember(content) { qrCodeBitmap(content) }
-    androidx.compose.foundation.Image(
-        bitmap = bitmap.asImageBitmap(),
-        contentDescription = "QR-Code zum Pairing",
-        modifier = modifier
-    )
+private fun ProfileSwitcher(ctx: Context, onResult: (String, String) -> Unit) {
+    var showAdd by remember { mutableStateOf(false) }
+    var tick by remember { mutableStateOf(0) }
+    val profiles = remember(tick) { ProfileStore.list(ctx) }
+    val activeId = ProfileStore.activeId(ctx)
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        profiles.forEach { p ->
+            BtnSmall(p.name, selected = (p.id == activeId)) {
+                ProfileStore.setActive(ctx, p.id)
+                tick++
+                onResult(p.name, p.id)
+            }
+        }
+        BtnSmall("+ Neu") { showAdd = true }
+    }
+    if (showAdd) {
+        var name by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text("Neues Profil", color = Color(0xFFE8EEFC), fontSize = 18.sp) },
+            text = {
+                TextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (name.isNotBlank()) {
+                        ProfileStore.add(ctx, name.trim())
+                        tick++
+                        showAdd = false
+                    }
+                }) { Text("Anlegen") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("Abbrechen") } },
+            containerColor = Color(0xFF10141F)
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BtnSmall(text: String, selected: Boolean = false, danger: Boolean = false, onClick: () -> Unit) {
+    val fg = when {
+        danger -> Color(0xFFFFB3B3)
+        selected -> Color(0xFF1A1205)
+        else -> Color(0xFFE8EEFC)
+    }
+    val bg = when {
+        selected -> Color(0xFFFFC94D)
+        danger -> Color(0xFF2A1A1A)
+        else -> Color(0xFF141A2A)
+    }
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(9.dp),
+        color = bg,
+        border = androidx.compose.foundation.BorderStroke(1.dp,
+            if (selected) Color(0xFFFFC94D) else if (danger) Color(0xFF5A3A3A) else Color(0xFF3A4666))
+    ) {
+        Text(text, color = fg, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp))
+    }
+}
+
+
+// ---------- QR-Code (ZXing BitMatrix auf weiße Fläche, ohne UI-Abhängigkeit) ----------
+@Composable
+fun QrCode(text: String, size: androidx.compose.ui.unit.Dp = 160.dp, modifier: Modifier = Modifier) {
+    val matrix = remember(text) {
+        runCatching {
+            com.google.zxing.qrcode.QRCodeWriter()
+                .encode(text, com.google.zxing.BarcodeFormat.QR_CODE, 260, 260)
+        }.getOrNull()
+    }
+    if (matrix != null) {
+        val n = (matrix.width).coerceAtLeast(1)
+        val c = size.value / n
+        Canvas(
+            modifier = modifier
+                .background(Color.White)
+                .size(size)
+                .padding(size * 0.04f)
+        ) {
+            for (y in 0 until matrix.height) for (x in 0 until matrix.width) {
+                if (matrix.get(x, y)) {
+                    drawRect(Color.Black, androidx.compose.ui.geometry.Offset(x * c, y * c),
+                        androidx.compose.ui.geometry.Size(c, c))
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1147,6 +1272,10 @@ fun ChannelGrid(
     // Sortier-Modus + Kanal-Langdruck-Menü + FSK18-PIN-Sperre
     var sortMode by remember { mutableStateOf(ChannelPrefs.sortMode(appCtx)) }
     var channelMenuFor by remember { mutableStateOf<LiveStream?>(null) }
+    // Kategorie-Verwaltung (Menu-Taste / Langdruck in Live-Sidebar)
+    var catMenuFor by remember { mutableStateOf<Category?>(null) }
+    // Kategorien sortiert/umbenannt/ausgeblendet (wie VOD, Scope "live")
+    val orderedCats = remember(categories, catMenuFor) { CategoryPrefs.applyTo("live", categories) }
     var lockPinFor by remember { mutableStateOf<LiveStream?>(null) }
     var playGateFor by remember { mutableStateOf<LiveStream?>(null) }  // FSK18: PIN vor Abspielen
     val catListState = rememberLazyListState()
@@ -1155,10 +1284,15 @@ fun ChannelGrid(
     // Tick: +1 bei jedem Klick auf eine Kategorie => Fokus auf 1. Kanal lenken
     var focusListTick by remember { mutableStateOf(0) }
 
-    val shown = remember(channels, searchQuery, selectedCategory, favMode, vm.favorites, sortMode) {
+    val shown = remember(channels, searchQuery, selectedCategory, favMode, vm.favorites, sortMode, catMenuFor) {
         var list = channels
         if (favMode) list = list.filter { it.streamId in vm.favorites }
         if (selectedCategory != null) list = list.filter { it.categoryId == selectedCategory }
+        else {
+            // „Alle Kanäle": Kanäle ausgeblendeter Gruppen raus (Sonst steht z.B. der 1. Start-Kanal aus einer ausgeblendeten Gruppe)
+            val hiddenCats = CategoryPrefs.hiddenIds("live")
+            if (hiddenCats.isNotEmpty()) list = list.filter { it.categoryId !in hiddenCats }
+        }
         if (searchQuery.isNotBlank()) list = list.filter { it.name.contains(searchQuery, true) }
         ChannelPrefs.apply(appCtx, list)
     }
@@ -1177,7 +1311,7 @@ fun ChannelGrid(
         val idx = when {
             favMode -> 1  // "Favoriten"-Eintrag
             selectedCategory != null -> {
-                val i = categories.indexOfFirst { it.id == selectedCategory }
+                val i = orderedCats.indexOfFirst { it.id == selectedCategory }
                 if (i >= 0) i + 2 else 0   // +2: "Alle Kanäle" + "Favoriten" oben
             }
             else -> 0
@@ -1203,8 +1337,14 @@ fun ChannelGrid(
                 CategoryItem("Favoriten (${vm.favorites.size})", favMode, onClick = { categoryClicked(null, true) }, compact = compact)
                 Spacer(Modifier.height(8.dp))
             }
-            items(categories) { cat ->
-                CategoryItem(cat.name, selectedCategory == cat.id, onClick = { categoryClicked(cat.id, false) }, compact = compact)
+            items(orderedCats) { cat ->
+                CategoryItem(
+                    CategoryPrefs.labelOf("live", cat),
+                    selectedCategory == cat.id,
+                    onClick = { categoryClicked(cat.id, false) },
+                    onMenu = { catMenuFor = cat },
+                    compact = compact
+                )
             }
         }
 
@@ -1241,14 +1381,18 @@ fun ChannelGrid(
                     )
                 } else {
                     // Ruhender Zustand: Pill-Optik, klickbar, aber kein Textfeld-Fokus
+                    val pillF = remember { mutableStateOf(false) }
                     Surface(
                         onClick = { searchArmed = true },
                         shape = MaterialTheme.shapes.extraLarge,
-                        color = Color(0xFF0B0E14),
+                        color = if (pillF.value) Color(0xFF1B2438) else Color(0xFF0B0E14),
                         border = androidx.compose.foundation.BorderStroke(
-                            1.dp, if (searchFocused) Color(0xFFFFC94D) else Color(0xFF232C42)
+                            if (pillF.value) 2.dp else 1.dp,
+                            if (pillF.value || searchFocused) Color(0xFFFFC94D) else Color(0xFF232C42)
                         ),
-                        modifier = Modifier.width(if (compact) 220.dp else 340.dp)
+                        modifier = Modifier
+                            .width(if (compact) 220.dp else 340.dp)
+                            .onFocusChanged { pillF.value = it.isFocused }
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1269,6 +1413,7 @@ fun ChannelGrid(
                 }
                 Spacer(Modifier.width(14.dp))
                 // Sortier-Button (Nummer / Name / Manuell)
+                val sortF = remember { mutableStateOf(false) }
                 Surface(
                     onClick = {
                         val modes = listOf("num", "name", "manual")
@@ -1277,8 +1422,12 @@ fun ChannelGrid(
                         ChannelPrefs.setSortMode(appCtx, next)
                     },
                     shape = MaterialTheme.shapes.extraLarge,
-                    color = Color(0xFF11172A),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF232C42))
+                    color = if (sortF.value) Color(0xFF1B2438) else Color(0xFF11172A),
+                    border = androidx.compose.foundation.BorderStroke(
+                        if (sortF.value) 2.dp else 1.dp,
+                        if (sortF.value) Color(0xFFFFC94D) else Color(0xFF232C42)
+                    ),
+                    modifier = Modifier.onFocusChanged { sortF.value = it.isFocused }
                 ) {
                     Text(
                         when (sortMode) {
@@ -1291,13 +1440,9 @@ fun ChannelGrid(
                     )
                 }
                 Spacer(Modifier.width(10.dp))
-                TextButton(onClick = onOpenEpg) {
-                    Text("📅", fontSize = 22.sp, color = Color(0xFF8FA3C8))
-                }
+                IconBtn("📅", onClick = onOpenEpg)
                 Spacer(Modifier.width(6.dp))
-                TextButton(onClick = onOpenSettings) {
-                    Text("⚙", fontSize = 22.sp, color = Color(0xFF8FA3C8))
-                }
+                IconBtn("⚙", onClick = onOpenSettings)
             }
             Spacer(Modifier.height(14.dp))
 
@@ -1329,6 +1474,7 @@ fun ChannelGrid(
                         onToggleFav = { vm.toggleFavorite(ch.streamId) },
                         vm = vm,
                         onLongPress = { channelMenuFor = ch },
+                        onMenu = { channelMenuFor = ch },
                         focusOnAppear = if (shown.indexOfFirst { it.streamId == ch.streamId } == 0) firstRowFocus else null,
                         compact = compact
                     )
@@ -1405,6 +1551,16 @@ fun ChannelGrid(
         )
     }
 
+    // ---- Kategorie-Verwaltung: MENU-Taste (FireTV) oder Langdruck ----
+    catMenuFor?.let { c ->
+        CategoryMenuDialog(
+            scope = "live",
+            cat = c,
+            cats = categories,
+            onDismiss = { catMenuFor = null }
+        )
+    }
+
     // ---- FSK18-PIN-Abfrage: Kanal abspielen nur nach PIN ----
     lockPinFor?.let { ch ->
         val locked = ChannelPrefs.isLocked(appCtx, ch.streamId)
@@ -1475,8 +1631,35 @@ fun ChannelGrid(
     }
 }
 
+// Icon-Button für die Top-Bar: deutlicher TV-Fokus (Gold-Rahmen + heller Grund)
 @Composable
-fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit, focusRequester: FocusRequester? = null, compact: Boolean = false) {
+private fun IconBtn(icon: String, onClick: () -> Unit) {
+    val f = remember { mutableStateOf(false) }
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = if (f.value) Color(0xFF1B2438) else Color(0xFF11172A),
+        border = androidx.compose.foundation.BorderStroke(
+            if (f.value) 2.dp else 1.dp,
+            if (f.value) Color(0xFFFFC94D) else Color(0xFF232C42)
+        ),
+        modifier = Modifier.onFocusChanged { f.value = it.isFocused }
+    ) {
+        Text(icon, fontSize = 20.sp, color = if (f.value) Color(0xFFE8EEFC) else Color(0xFF8FA3C8),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp))
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun CategoryItem(
+    name: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onMenu: (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
+    compact: Boolean = false
+) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         // Aktiv: DEUTLICH dunkler als die Sidebar (fast schwarz) => klar erkennbar
@@ -1491,7 +1674,12 @@ fun CategoryItem(name: String, selected: Boolean, onClick: () -> Unit, focusRequ
         modifier = Modifier.fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { focused = it.isFocused }
-            .clickable(onClick = onClick)
+            // FireTV: MENU-Taste => Kategorie-Menue (Sortieren/Ausblenden/Umbenennen)
+            .onPreviewKeyEvent { e ->
+                val m = onMenu
+                if (m != null && e.key == Key.Menu && e.type == KeyEventType.KeyDown) { m(); true } else false
+            }
+            .combinedClickable(onClick = onClick, onLongClick = onMenu)
     ) {
         Row {
             // Aktiver Eintrag: goldener Balken links (002-Stil)
@@ -1526,6 +1714,7 @@ fun ChannelRow(
     onToggleFav: () -> Unit,
     vm: MainViewModel,
     onLongPress: () -> Unit = {},
+    onMenu: (() -> Unit)? = null,
     focusOnAppear: FocusRequester? = null,
     compact: Boolean = false
 ) {
@@ -1556,6 +1745,11 @@ fun ChannelRow(
             .padding(vertical = 3.dp)
             .then(if (focusOnAppear != null) Modifier.focusRequester(focusOnAppear) else Modifier)
             .onFocusChanged { focused = it.isFocused }
+            // FireTV: MENU-Taste => Kanal-Menue
+            .onPreviewKeyEvent { e ->
+                val m = onMenu
+                if (m != null && e.key == Key.Menu && e.type == KeyEventType.KeyDown) { m(); true } else false
+            }
             .combinedClickable(onClick = onPlay, onLongClick = onLongPress)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = if (compact) 12.dp else 16.dp, vertical = if (compact) 6.dp else 10.dp)) {
