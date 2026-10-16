@@ -51,6 +51,11 @@ object ChannelPrefs {
         prefs(ctx).edit().putStringSet(K_HIDDEN, emptySet()).apply()
     }
 
+    /** Setzt Sortiermodus, manuelle Reihenfolge, Ausblendungen und FSK-Sperren komplett zurueck. */
+    fun resetAll(ctx: Context) {
+        prefs(ctx).edit().clear().apply()
+    }
+
     fun hiddenCount(ctx: Context): Int =
         prefs(ctx).getStringSet(K_HIDDEN, emptySet())?.size ?: 0
 

@@ -70,13 +70,16 @@ class RobustLivePlayer(ctx: Context) {
     /** Einmalig berechnete Puffergrößen [min, max, playback, afterRebuffer] in ms. */
     private val bufferDurations: IntArray = detectBufferDurations()
 
+    /** Timeshift: wie weit man bei pausiertem Live-TV zurueckspulen darf (0 = Standard). */
+    private val liveLookbackMs = PlayPrefs.lookback(ctx).toInt()
+
     val player: ExoPlayer = ExoPlayer.Builder(ctx)
         .setTrackSelector(DefaultTrackSelector(ctx))
         .setLoadControl(
             DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
                     bufferDurations[0],
-                    bufferDurations[1],
+                    maxOf(bufferDurations[1], liveLookbackMs),
                     bufferDurations[2],
                     bufferDurations[3]
                 )
@@ -164,7 +167,15 @@ class RobustLivePlayer(ctx: Context) {
         val url = currentUrl ?: return
         player.apply {
             stop()  // alter State weg, Reconnect ist sauber
-            setMediaItem(MediaItem.fromUri(url))
+            val item = MediaItem.Builder()
+                .setUri(url)
+                .setLiveConfiguration(
+                    MediaItem.LiveConfiguration.Builder()
+                        .setMaxOffsetMs(liveLookbackMs.toLong())
+                        .build()
+                )
+                .build()
+            setMediaItem(item)
             prepare()
             play()
         }
@@ -212,5 +223,15 @@ class RobustLivePlayer(ctx: Context) {
     fun release() {
         currentUrl = null
         player.release()
+    }
+}
+
+/** Timeshift-Einstellung (Live-TV-Pause + Zurueckspulen). App-weit, nicht pro Profil. */
+object PlayPrefs {
+    private const val PREFS = "smartys_play"
+    fun lookback(ctx: Context): Long =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("live_lookback_ms", 0L)
+    fun setLookback(ctx: Context, ms: Long) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong("live_lookback_ms", ms).apply()
     }
 }

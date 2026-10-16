@@ -21,12 +21,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -61,9 +63,15 @@ fun MovieGrid(
     val gridState = rememberLazyGridState()
     val restoreFocus = remember { androidx.compose.ui.focus.FocusRequester() }
 
-    val shown = remember(movies, selectedCategory, searchQuery) {
+    val compact = LocalConfiguration.current.screenWidthDp < 1000
+    var catMenuRefresh by remember { mutableStateOf(0) }
+    val shown = remember(movies, selectedCategory, searchQuery, catMenuRefresh) {
         var list = movies
         if (selectedCategory != null) list = list.filter { it.categoryId == selectedCategory }
+        else {
+            val hiddenCats = CategoryPrefs.hiddenIds("movies")
+            if (hiddenCats.isNotEmpty()) list = list.filter { it.categoryId !in hiddenCats }
+        }
         if (searchQuery.isNotBlank()) list = list.filter { it.name.contains(searchQuery, true) }
         list
     }
@@ -138,7 +146,7 @@ fun MovieGrid(
                 val orderedCats = remember(categories, catMenuFor) {
                     CategoryPrefs.applyTo("movies", categories)
                 }
-                LazyColumn(Modifier.width(300.dp).fillMaxHeight().background(Color(0xFF11172A)).padding(vertical = 14.dp)) {
+                LazyColumn(Modifier.width(if (compact) 240.dp else 300.dp).fillMaxHeight().background(Color(0xFF11172A)).padding(vertical = 14.dp)) {
                     item { CategoryItem("Alle Filme", selectedCategory == null, onClick = { onSelectCategory(null) }, focusRequester = firstCatFocus) }
                     items(orderedCats) { cat ->
                         VodCategoryItem(
@@ -146,6 +154,7 @@ fun MovieGrid(
                             selected = selectedCategory == cat.id,
                             onClick = { onSelectCategory(cat.id) },
                             onLongPress = { catMenuFor = cat },
+                            onMenu = { catMenuFor = cat },
                             label = CategoryPrefs.labelOf("movies", cat)
                         )
                     }
@@ -155,7 +164,7 @@ fun MovieGrid(
                         scope = "movies",
                         cat = catMenuFor!!,
                         cats = categories,
-                        onDismiss = { catMenuFor = null }
+                        onDismiss = { catMenuFor = null; catMenuRefresh++ }
                     )
                 }
                 // Poster-Grid
@@ -263,9 +272,15 @@ fun SeriesGrid(
 ) {
     var searchQuery by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
 
-    val shown = remember(shows, selectedCategory, searchQuery) {
+    val compact = LocalConfiguration.current.screenWidthDp < 1000
+    var catMenuRefresh by remember { mutableStateOf(0) }
+    val shown = remember(shows, selectedCategory, searchQuery, catMenuRefresh) {
         var list = shows
         if (selectedCategory != null) list = list.filter { it.categoryId == selectedCategory }
+        else {
+            val hiddenCats = CategoryPrefs.hiddenIds("series")
+            if (hiddenCats.isNotEmpty()) list = list.filter { it.categoryId !in hiddenCats }
+        }
         if (searchQuery.isNotBlank()) list = list.filter { it.name.contains(searchQuery, true) }
         list
     }
@@ -313,7 +328,7 @@ fun SeriesGrid(
             val orderedCats = remember(categories, catMenuFor) {
                 CategoryPrefs.applyTo("series", categories)
             }
-            LazyColumn(Modifier.width(300.dp).fillMaxHeight().background(Color(0xFF11172A)).padding(vertical = 14.dp)) {
+            LazyColumn(Modifier.width(if (compact) 240.dp else 300.dp).fillMaxHeight().background(Color(0xFF11172A)).padding(vertical = 14.dp)) {
                 item { CategoryItem("Alle Serien", selectedCategory == null, onClick = { onSelectCategory(null) }, focusRequester = firstCatFocus) }
                 items(orderedCats) { cat ->
                     VodCategoryItem(
@@ -321,6 +336,7 @@ fun SeriesGrid(
                         selected = selectedCategory == cat.id,
                         onClick = { onSelectCategory(cat.id) },
                         onLongPress = { catMenuFor = cat },
+                        onMenu = { catMenuFor = cat },
                         label = CategoryPrefs.labelOf("series", cat)
                     )
                 }
@@ -330,7 +346,7 @@ fun SeriesGrid(
                     scope = "series",
                     cat = catMenuFor!!,
                     cats = categories,
-                    onDismiss = { catMenuFor = null }
+                    onDismiss = { catMenuFor = null; catMenuRefresh++ }
                 )
             }
             LazyVerticalGrid(
@@ -762,7 +778,14 @@ fun MovieDetail(
 /** Kategorie-Eintrag mit Langdruck (OK lange drücken) => Verwaltungs-Menü. */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun VodCategoryItem(cat: Category, selected: Boolean, onClick: () -> Unit, onLongPress: () -> Unit, label: String = cat.name) {
+fun VodCategoryItem(
+    cat: Category,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+    onMenu: (() -> Unit)? = null,
+    label: String = cat.name
+) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         color = when {
@@ -774,6 +797,11 @@ fun VodCategoryItem(cat: Category, selected: Boolean, onClick: () -> Unit, onLon
         border = if (focused) androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D)) else null,
         modifier = Modifier.fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
+            // FireTV: MENU-Taste => Kategorie verwalten (Sortieren/Ausblenden/Umbenennen)
+            .onPreviewKeyEvent { e ->
+                val m = onMenu
+                if (m != null && e.key == Key.Menu && e.type == KeyEventType.KeyDown) { m(); true } else false
+            }
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
     ) {
         Row {
@@ -869,27 +897,72 @@ fun CategoryMenuDialog(scope: String, cat: Category, cats: List<Category>, onDis
                             CategoryPrefs.unhideAll(scope); refresh++; onDismiss()
                         }
                     }
+                    Spacer(Modifier.height(10.dp))
+                    MenuBtn("♻️ Alles zurücksetzen (Reihenfolge · Namen · Ausblenden)", fg = Color(0xFF8FA3C8)) {
+                        CategoryPrefs.resetAll(scope); refresh++
+                    }
                 }
                 1 -> Column {
-                    Text("Markierte Kategorien bewegen sich als EINER Block — eine Position nach oben oder unten. " +
-                         "Oder blendet ihr direkt aus.",
-                        color = Color(0xFF6B7A99), fontSize = 13.sp)
-                    Spacer(Modifier.height(10.dp))
-                    Column(
-                        modifier = Modifier
-                            .heightIn(max = 320.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
+                    Text("Anklicken markiert. ", color = Color(0xFF6B7A99), fontSize = 13.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniBtn("✅ Alle markieren") { marked = visible.map { it.id }.toSet() }
+                        MiniBtn("⬜ Aufheben") { marked = emptySet() }
+                        MiniBtn("👁 Alle einblenden") { CategoryPrefs.unhideAll(scope); refresh++ }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniBtn("▲ Block oben (${marked.size})") {
+                            if (marked.isNotEmpty()) { CategoryPrefs.moveBlock(scope, marked.toList(), cats, true); refresh++ }
+                        }
+                        MiniBtn("▼ Block unten (${marked.size})") {
+                            if (marked.isNotEmpty()) { CategoryPrefs.moveBlock(scope, marked.toList(), cats, false); refresh++ }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniBtn("🚫 Nur Markierte behalten", red = true) {
+                            val toHide = visible.filter { it.id !in marked }.map { it.id }
+                            if (toHide.isNotEmpty()) { CategoryPrefs.hideMany(scope, toHide); refresh++ }
+                        }
+                        MiniBtn("🚫 Markierte ausblenden (${marked.size})", red = true) {
+                            if (marked.isNotEmpty()) { CategoryPrefs.hideMany(scope, marked.toList()); refresh++ }
+                        }
+                        MiniBtn("✓ Fertig", gold = true) { onDismiss() }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Markiert: ${marked.size} von ${visible.size}",
+                        color = Color(0xFF8FA3C8), fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    BoxWithConstraints {
+                        val maxList = (maxHeight * 0.45f).coerceAtMost(400.dp)
+                        Column(
+                            modifier = Modifier
+                                .heightIn(max = maxList)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                        val focusedRowId = remember { mutableStateOf<String?>(null) }
                         visible.forEach { c ->
                             val isMarked = c.id in marked
+                            val rowF = (focusedRowId.value == c.id)
                             Surface(
                                 onClick = { marked = if (isMarked) marked - c.id else marked + c.id },
                                 shape = RoundedCornerShape(8.dp),
-                                color = if (isMarked) Color(0xFF1E2A45) else Color(0xFF141A2A),
-                                border = if (isMarked)
-                                    androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
-                                else null,
+                                color = when {
+                                    rowF -> if (isMarked) Color(0xFF2A3A66) else Color(0xFF243055)
+                                    isMarked -> Color(0xFF1E2A45)
+                                    else -> Color(0xFF141A2A)
+                                },
+                                border = when {
+                                    rowF -> androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D))
+                                    isMarked -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
+                                    else -> null
+                                },
                                 modifier = Modifier.fillMaxWidth()
+                                    .onFocusChanged {
+                                        if (it.isFocused) focusedRowId.value = c.id
+                                        else if (focusedRowId.value == c.id) focusedRowId.value = null
+                                    }
                             ) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
                                     Text(if (isMarked) "☑" else "☐", fontSize = 16.sp, color = Color(0xFFE8EEFC))
@@ -904,24 +977,10 @@ fun CategoryMenuDialog(scope: String, cat: Category, cats: List<Category>, onDis
                             }
                             Spacer(Modifier.height(5.dp))
                         }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MenuBtn("▲ Block eine Position oben (${marked.size})") {
-                            if (marked.isNotEmpty()) { CategoryPrefs.moveBlock(scope, marked.toList(), cats, true); refresh++ }
                         }
-                        MenuBtn("▼ Block eine Position unten (${marked.size})") {
-                            if (marked.isNotEmpty()) { CategoryPrefs.moveBlock(scope, marked.toList(), cats, false); refresh++ }
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MenuBtn("🚫 Markierte ausblenden (${marked.size})", fg = Color(0xFFFF9B9B), bg = Color(0xFF2A1A1A), bd = Color(0xFF664444)) {
-                            if (marked.isNotEmpty()) { CategoryPrefs.hideMany(scope, marked.toList()); refresh++ }
-                        }
-                        MenuBtn("✓ Fertig") { onDismiss() }
                     }
                 }
+
                 else -> Column {
                     Text("Neuen Namen für die Kategorie eingeben (leer = Original-Name).",
                         color = Color(0xFF6B7A99), fontSize = 13.sp)
@@ -978,16 +1037,50 @@ private fun MenuBtn(
     bd: Color = Color(0xFF3A4666),
     onClick: () -> Unit
 ) {
+    // TV-Fokus: deutlicher Gold-Rahmen + hellerer Grund + hellerer Text
+    val focused = remember { mutableStateOf(false) }
+    val isGold = (bg == Color(0xFFFFC94D))
+    val ring = if (isGold) Color(0xFF1A2238) else Color(0xFFFFC94D)
+    val bgF = if (isGold) Color(0xFFFFD975) else Color(0xFF1B2438)
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
-        color = bg,
-        border = androidx.compose.foundation.BorderStroke(1.dp, bd)
+        color = if (focused.value) bgF else bg,
+        border = androidx.compose.foundation.BorderStroke(
+            if (focused.value) 2.dp else 1.dp,
+            if (focused.value) ring else bd
+        ),
+        modifier = Modifier.onFocusChanged { focused.value = it.isFocused }
     ) {
-        Text(text, color = fg, fontSize = 14.sp,
+        Text(text, color = if (focused.value && isGold) Color(0xFFFFFFFF) else fg, fontSize = 14.sp,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
     }
 }
+@Composable
+private fun MiniBtn(text: String, red: Boolean = false, gold: Boolean = false, onClick: () -> Unit) {
+    val label = text
+    val fg = when { gold -> Color(0xFF0A0D16); red -> Color(0xFFFF9B9B); else -> Color(0xFFE8EEFC) }
+    val bg = when { gold -> Color(0xFFFFC94D); red -> Color(0xFF2A1A1A); else -> Color(0xFF141A2A) }
+    val bd = when { gold -> Color(0xFFFFC94D); red -> Color(0xFF664444); else -> Color(0xFF3A4666) }
+    // TV-Fokus: deutlicher Rahmen (non-gold: Gold-Ring, gold: dunkler Ring)
+    val focused = remember { mutableStateOf(false) }
+    val ring = if (gold) Color(0xFF1A2238) else Color(0xFFFFC94D)
+    val bgF = if (gold) Color(0xFFFFD975) else if (red) Color(0xFF3A2424) else Color(0xFF1B2438)
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(7.dp),
+        color = if (focused.value) bgF else bg,
+        border = androidx.compose.foundation.BorderStroke(
+            if (focused.value) 2.dp else 1.dp,
+            if (focused.value) ring else bd
+        ),
+        modifier = Modifier.onFocusChanged { focused.value = it.isFocused }
+    ) {
+        Text(label, color = fg, fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+    }
+}
+
 
 // ---------- Downloads-Übersicht (offline verfügbare VOD-Titel) ----------
 
