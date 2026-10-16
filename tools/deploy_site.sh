@@ -26,7 +26,7 @@ set -euo pipefail
 
 SSH="ssh -o ConnectTimeout=10 hostinger"
 VPS_BASE="/home/smarty/docker-host/iptv-backend"
-LOCAL_BASE="$HOME/Projekte/SmartysIPTV"
+LOCAL_BASE="$HOME/Projekte/Smartys Player/Android"
 
 # Ordner-Name -> Docker-Service-Name (unterscheiden sich!)
 declare -A SERVICE_MAP=(

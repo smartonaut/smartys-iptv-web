@@ -53,6 +53,29 @@ object CategoryPrefs {
         }
     }
 
+    /**
+     * Mehrere Kategorien als EIN Block um eine Position verschieben:
+     * Der Nachbar direkt über/unter dem gewählten Bereich tauscht mit dem Block —
+     * interne Reihenfolge bleibt erhalten, andere Kategorien wandern nicht mit.
+     */
+    fun moveBlock(scope: String, catIds: List<String>, cats: List<Category>, up: Boolean) {
+        if (catIds.isEmpty()) return
+        val list = currentOrder(scope, cats).toMutableList()
+        val selSet = catIds.toSet()
+        val firstIdx = list.indexOfFirst { it in selSet }
+        val lastIdx = list.indexOfLast { it in selSet }
+        if (firstIdx < 0 || firstIdx == lastIdx) {
+            // Einzelne Kategorie => klassischen Pfad nehmen
+            if (firstIdx >= 0) { if (up) moveUp(scope, catIds.first(), cats) else moveDown(scope, catIds.first(), cats) }
+            return
+        }
+        val neighbor = if (up) firstIdx - 1 else lastIdx + 1
+        if (neighbor < 0 || neighbor >= list.size) return
+        val item = list.removeAt(neighbor)
+        list.add(if (up) lastIdx + 1 else firstIdx, item)
+        saveOrder(scope, list)
+    }
+
     fun hide(scope: String, catId: String) {
         val ctx = AppCtx.get() ?: return
         val p = prefs(ctx)
@@ -65,6 +88,36 @@ object CategoryPrefs {
         val ctx = AppCtx.get() ?: return
         prefs(ctx).edit().putStringSet(K_HIDDEN.format(scope), emptySet()).apply()
     }
+
+    fun hideMany(scope: String, catIds: List<String>) {
+        if (catIds.isEmpty()) return
+        val ctx = AppCtx.get() ?: return
+        val p = prefs(ctx)
+        val hidden = (p.getStringSet(K_HIDDEN.format(scope), emptySet()) ?: emptySet()).toMutableSet()
+        hidden.addAll(catIds)
+        p.edit().putStringSet(K_HIDDEN.format(scope), hidden).apply()
+    }
+
+    // ---------- Eigene Namen (Umbenennen) ----------
+
+    private fun renameKey(scope: String, catId: String) = "rename_${scope}_${catId}"
+
+    fun customLabel(scope: String, catId: String): String? {
+        val ctx = AppCtx.get() ?: return null
+        return prefs(ctx).getString(renameKey(scope, catId), "")?.takeIf { it.isNotBlank() }
+    }
+
+    /** Setzt einen eigenen Namen; null/leer = zurück zum Original-Namen des Providers. */
+    fun setLabel(scope: String, catId: String, label: String?) {
+        val ctx = AppCtx.get() ?: return
+        val key = renameKey(scope, catId)
+        prefs(ctx).edit().apply {
+            val t = label?.trim().orEmpty()
+            if (t.isEmpty()) remove(key) else putString(key, t)
+        }.apply()
+    }
+
+    fun labelOf(scope: String, cat: Category): String = customLabel(scope, cat.id) ?: cat.name
 
     fun isHidden(scope: String, catId: String): Boolean {
         val ctx = AppCtx.get() ?: return false
