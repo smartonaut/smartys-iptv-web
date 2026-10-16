@@ -21,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.FocusRequester
@@ -144,7 +145,8 @@ fun MovieGrid(
                             cat = cat,
                             selected = selectedCategory == cat.id,
                             onClick = { onSelectCategory(cat.id) },
-                            onLongPress = { catMenuFor = cat }
+                            onLongPress = { catMenuFor = cat },
+                            label = CategoryPrefs.labelOf("movies", cat)
                         )
                     }
                 }
@@ -318,7 +320,8 @@ fun SeriesGrid(
                         cat = cat,
                         selected = selectedCategory == cat.id,
                         onClick = { onSelectCategory(cat.id) },
-                        onLongPress = { catMenuFor = cat }
+                        onLongPress = { catMenuFor = cat },
+                        label = CategoryPrefs.labelOf("series", cat)
                     )
                 }
             }
@@ -759,7 +762,7 @@ fun MovieDetail(
 /** Kategorie-Eintrag mit Langdruck (OK lange drücken) => Verwaltungs-Menü. */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun VodCategoryItem(cat: Category, selected: Boolean, onClick: () -> Unit, onLongPress: () -> Unit) {
+fun VodCategoryItem(cat: Category, selected: Boolean, onClick: () -> Unit, onLongPress: () -> Unit, label: String = cat.name) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         color = when {
@@ -776,7 +779,7 @@ fun VodCategoryItem(cat: Category, selected: Boolean, onClick: () -> Unit, onLon
         Row {
             if (selected) Box(Modifier.width(5.dp).fillMaxHeight().background(Color(0xFFFFC94D)))
             Text(
-                cat.name,
+                label.ifBlank { cat.name },
                 color = when {
                     selected -> Color(0xFFFFC94D)
                     focused -> Color(0xFFE8EEFC)
@@ -798,76 +801,192 @@ fun VodCategoryItem(cat: Category, selected: Boolean, onClick: () -> Unit, onLon
 private var currentScope = "movies"
 private fun hiddenScopeFor(@Suppress("UNUSED_PARAMETER") cat: Category): String = currentScope
 
+/**
+ * Kategorie-Verwaltung (Langdruck-OK in der VOD-Sidebar).
+ * Modi: 0 = Einzel-Kategorie (Sort/Umbenennen/Ausblenden),
+ *       1 = Mehrfach-Markierung (Block-Sort/Mehrfach-Ausblenden),
+ *       2 = Umbenennen (Textfeld).
+ */
 @Composable
 fun CategoryMenuDialog(scope: String, cat: Category, cats: List<Category>, onDismiss: () -> Unit) {
-    // Scope fuer das Item-Marker-Composable setzen (wird vor dem Dialog gerendert):
-    androidx.compose.runtime.LaunchedEffect(scope) { }
-    androidx.compose.runtime.DisposableEffect(scope) {
-        currentScope = scope
-        onDispose { }
+    var mode by remember { mutableStateOf(0) }
+    var marked by remember { mutableStateOf(setOf(cat.id)) }
+    var label by remember { mutableStateOf(CategoryPrefs.customLabel(scope, cat.id) ?: cat.name) }
+    var refresh by remember { mutableStateOf(0) }
+    val visible = remember(cats, refresh) { CategoryPrefs.applyTo(scope, cats) }
+    val hasCustom = remember(refresh) { CategoryPrefs.customLabel(scope, cat.id) != null }
+    val renameFocus = remember { FocusRequester() }
+    val kbd = LocalSoftwareKeyboardController.current
+    LaunchedEffect(mode) {
+        if (mode == 2) { kotlinx.coroutines.delay(150); runCatching { renameFocus.requestFocus() } }
+        if (mode == 0) runCatching { kbd?.hide() }
     }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(cat.name, color = Color(0xFFE8EEFC), fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        title = {
+            Text(
+                when (mode) {
+                    0 -> CategoryPrefs.labelOf(scope, cat)
+                    1 -> "Kategorien markieren (${marked.size} gewählt)"
+                    else -> "Kategorie umbenennen"
+                },
+                color = Color(0xFFE8EEFC), fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+        },
         text = {
-            Column {
-                Text(
-                    "Kategorie sortieren oder ausblenden",
-                    color = Color(0xFF6B7A99), fontSize = 13.sp
-                )
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            when (mode) {
+                0 -> Column {
+                    Text("Kategorie sortieren, umbenennen oder ausblenden",
+                        color = Color(0xFF6B7A99), fontSize = 13.sp)
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MenuBtn("▲ Nach oben") { CategoryPrefs.moveUp(scope, cat.id, cats); refresh++; onDismiss() }
+                        MenuBtn("▼ Nach unten") { CategoryPrefs.moveDown(scope, cat.id, cats); refresh++; onDismiss() }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MenuBtn("✏️ Umbenennen") {
+                            label = CategoryPrefs.customLabel(scope, cat.id) ?: cat.name
+                            mode = 2
+                        }
+                        if (hasCustom) {
+                            MenuBtn("🔁 Name zurücksetzen", fg = Color(0xFF8FA3C8)) {
+                                CategoryPrefs.setLabel(scope, cat.id, null); refresh++
+                            }
+                        }
+                        MenuBtn("🎯 Mehrere markieren") {
+                            marked = setOf(cat.id); mode = 1
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MenuBtn("🚫 Ausblenden", fg = Color(0xFFFF9B9B), bg = Color(0xFF2A1A1A), bd = Color(0xFF664444)) {
+                            CategoryPrefs.hide(scope, cat.id); refresh++; onDismiss()
+                        }
+                        MenuBtn("👁 Alle wieder einblenden", fg = Color(0xFF8FA3C8)) {
+                            CategoryPrefs.unhideAll(scope); refresh++; onDismiss()
+                        }
+                    }
+                }
+                1 -> Column {
+                    Text("Markierte Kategorien bewegen sich als EINER Block — eine Position nach oben oder unten. " +
+                         "Oder blendet ihr direkt aus.",
+                        color = Color(0xFF6B7A99), fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        visible.forEach { c ->
+                            val isMarked = c.id in marked
+                            Surface(
+                                onClick = { marked = if (isMarked) marked - c.id else marked + c.id },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isMarked) Color(0xFF1E2A45) else Color(0xFF141A2A),
+                                border = if (isMarked)
+                                    androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
+                                else null,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
+                                    Text(if (isMarked) "☑" else "☐", fontSize = 16.sp, color = Color(0xFFE8EEFC))
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(CategoryPrefs.labelOf(scope, c),
+                                        color = if (isMarked) Color(0xFFE8EEFC) else Color(0xFF8FA3C8),
+                                        fontSize = 14.sp,
+                                        fontWeight = if (isMarked) FontWeight.SemiBold else FontWeight.Normal,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f))
+                                }
+                            }
+                            Spacer(Modifier.height(5.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MenuBtn("▲ Block eine Position oben (${marked.size})") {
+                            if (marked.isNotEmpty()) { CategoryPrefs.moveBlock(scope, marked.toList(), cats, true); refresh++ }
+                        }
+                        MenuBtn("▼ Block eine Position unten (${marked.size})") {
+                            if (marked.isNotEmpty()) { CategoryPrefs.moveBlock(scope, marked.toList(), cats, false); refresh++ }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MenuBtn("🚫 Markierte ausblenden (${marked.size})", fg = Color(0xFFFF9B9B), bg = Color(0xFF2A1A1A), bd = Color(0xFF664444)) {
+                            if (marked.isNotEmpty()) { CategoryPrefs.hideMany(scope, marked.toList()); refresh++ }
+                        }
+                        MenuBtn("✓ Fertig") { onDismiss() }
+                    }
+                }
+                else -> Column {
+                    Text("Neuen Namen für die Kategorie eingeben (leer = Original-Name).",
+                        color = Color(0xFF6B7A99), fontSize = 13.sp)
+                    Spacer(Modifier.height(12.dp))
                     Surface(
-                        onClick = { CategoryPrefs.moveUp(scope, cat.id, cats); onDismiss() },
                         shape = RoundedCornerShape(10.dp),
                         color = Color(0xFF141A2A),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
                     ) {
-                        Text("▲ Nach oben", color = Color(0xFFE8EEFC), fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+                        TextField(
+                            value = label,
+                            onValueChange = { label = it },
+                            modifier = Modifier.fillMaxWidth()
+                                .focusRequester(renameFocus)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            singleLine = true,
+                            placeholder = { Text(cat.name, color = Color(0xFF55627F)) },
+                            colors = TextFieldDefaults.colors(
+                                focusedTextColor = Color(0xFFE8EEFC),
+                                unfocusedTextColor = Color(0xFFE8EEFC),
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            )
+                        )
                     }
-                    Surface(
-                        onClick = { CategoryPrefs.moveDown(scope, cat.id, cats); onDismiss() },
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF141A2A),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
-                    ) {
-                        Text("▼ Nach unten", color = Color(0xFFE8EEFC), fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                Surface(
-                    onClick = {
-                        CategoryPrefs.hide(scope, cat.id)
-                        // Falls die versteckte Kategorie gerade gewaehlt war: zurueck auf "Alle"
-                        onDismiss()
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF2A1A1A),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF664444))
-                ) {
-                    Text("🚫 Ausblenden", color = Color(0xFFFF9B9B), fontSize = 14.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-                }
-                Spacer(Modifier.height(10.dp))
-                Surface(
-                    onClick = { CategoryPrefs.unhideAll(scope); onDismiss() },
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF141A2A),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
-                ) {
-                    Text("👁 Alle wieder einblenden", color = Color(0xFF8FA3C8), fontSize = 14.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            if (mode == 2) {
+                TextButton(onClick = {
+                    val t = label.trim()
+                    CategoryPrefs.setLabel(scope, cat.id, t.ifEmpty { null })
+                    refresh++; onDismiss()
+                }) { Text("Speichern", color = Color(0xFFFFC94D), fontSize = 15.sp) }
+            }
+        },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Schließen", color = Color(0xFF6B7A99)) }
+            if (mode != 2) {
+                TextButton(onClick = onDismiss) { Text("Schließen", color = Color(0xFF6B7A99)) }
+            }
         },
         containerColor = Color(0xFF10141F)
     )
+}
+
+@Composable
+private fun MenuBtn(
+    text: String,
+    fg: Color = Color(0xFFE8EEFC),
+    bg: Color = Color(0xFF141A2A),
+    bd: Color = Color(0xFF3A4666),
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        color = bg,
+        border = androidx.compose.foundation.BorderStroke(1.dp, bd)
+    ) {
+        Text(text, color = fg, fontSize = 14.sp,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
+    }
 }
 
 // ---------- Downloads-Übersicht (offline verfügbare VOD-Titel) ----------
