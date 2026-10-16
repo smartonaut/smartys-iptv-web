@@ -14,8 +14,8 @@ android {
         applicationId = "com.smartys.iptv"
         minSdk = 21
         targetSdk = 35
-        versionCode = 16
-        versionName = "0.4.4"
+        versionCode = 18
+        versionName = "0.6.0"
     }
 
     signingConfigs {

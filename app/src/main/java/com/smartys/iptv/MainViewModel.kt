@@ -117,10 +117,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
     private var apis: List<XtreamApi> = emptyList()
 
+    // ---------- Sicherheits-Passwort (Line im Panel verschlüsselt) ----------
+    // Panel liefert encrypted:true + salt + cipher_*-Felder statt Klartext.
+    // Dann: UI fragt das Sicherheits-Passwort ab, unlockLine() entschlüsselt
+    // und legt plain in RAM (Session) + auf der Platte (CredStore =
+    // EncryptedSharedPreferences) ab — ab dem nächsten Start kein Passwort
+    // mehr nötig. Gleicher Workflow wie Desktop + Enigma.
+    var unlockNeeded by mutableStateOf(false)
+        private set
+    var unlockError by mutableStateOf("")
+    private var pendingSaltB64 = ""
+    private var pendingIterations = 310_000
+    private var pendingCiphers: List<SecCrypto.SecProvider> = emptyList()
+    private var pendingPlayerId = ""
+
     /** Stream-URL eines Kanals über SEINEN Provider (statt immer den ersten). */
     fun streamUrlFor(channel: LiveStream): String? {
         val c = allProviders.getOrNull(channel.providerIndex) ?: creds ?: return null
         return c.streamUrl(channel.streamId)
+    }
+
+    /** MPEG-TS-Stream-URL für die Aufnahme (Xtream liefert Live-TV auch als rohes .ts). */
+    fun tsUrlFor(channel: LiveStream): String? {
+        val c = allProviders.getOrNull(channel.providerIndex) ?: creds ?: return null
+        return c.streamUrl(channel.streamId, "ts")
     }
 
     // ---------- EPG-Cache ----------
@@ -400,17 +420,43 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         pconn.connectTimeout = 8000; pconn.readTimeout = 8000
         if (pconn.responseCode != 200) return@runCatching false
         val respBody = org.json.JSONObject(pconn.inputStream.bufferedReader().readText())
+        // VERSCHLÜSSELTE Line (Panel-Workflow, wie Desktop/Enigma):
+        // {encrypted:true, name, salt, iterations, kdf, providers:[
+        //   {id,label, cipher_server_url, cipher_username, cipher_password, cipher_epg_url}]}
+        // => kein Klartext abrufbar; UI fragt das Sicherheits-Passwort ab.
+        if (respBody.optBoolean("encrypted")) {
+            val arrEnc = respBody.optJSONArray("providers") ?: org.json.JSONArray()
+            pendingPlayerId = playerId
+            pendingSaltB64 = respBody.optString("salt")
+            pendingIterations = respBody.optInt("iterations", 310_000)
+            pendingCiphers = (0 until arrEnc.length()).map { i ->
+                val p = arrEnc.getJSONObject(i)
+                SecCrypto.SecProvider(
+                    label = p.optString("label"),
+                    cipherServerUrl = p.optString("cipher_server_url"),
+                    cipherUsername = p.optString("cipher_username"),
+                    cipherPassword = p.optString("cipher_password")
+                )
+            }.filter { it.cipherServerUrl.isNotBlank() }
+            unlockError = ""
+            unlockNeeded = true
+            android.util.Log.d("SmartysIPTV", "panel: verschlüsselte Line empfangen (${pendingCiphers.size} Provider) — Sicherheits-Passwort nötig")
+            return@runCatching false   // noch nicht fertig: UI fragt Passwort ab
+        }
         // Backend liefert {name, providers:[{id,label,server_url,username,password,...}]}
         val providersArr = respBody.optJSONArray("providers") ?: org.json.JSONArray()
         if (providersArr.length() == 0) return@runCatching false
         val providers = (0 until providersArr.length()).map { i ->
             val p = providersArr.getJSONObject(i)
             CredStore.Creds(
-                p.getString("server_url"),
-                p.getString("username"),
-                p.getString("password")
+                p.optString("server_url"),
+                p.optString("username"),
+                p.optString("password")
             )
-        }
+        }.filter { it.url.isNotBlank() && it.user.isNotBlank() }
+        if (providers.isEmpty()) return@runCatching false
+        unlockNeeded = false
+        unlockError = ""
         // Speichern + als normale Session weitermachen:
         CredStore.saveAll(getApplication(), providers)
         creds = providers.first()
@@ -420,6 +466,46 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         loadContent()
         true
     }.getOrDefault(false)
+
+    /**
+     * Entschlüsselt die ausstehende Panel-Line mit dem Sicherheits-Passwort
+     * (PBKDF2-HMAC-SHA256 + AES-256-GCM, AAD = "smartys-iptv-sec:"+Player-ID;
+     * identisch zu backend/crypto.py, Desktop-SecCrypto, Enigma-crypto.py).
+     * Erfolg -> plain in RAM (Session) + auf Platte (CredStore/EncryptedPrefs),
+     * d. h. beim nächsten Start läuft die App OHNE Passwort (wie Desktop/Enigma).
+     * Falsches Passwort -> false + unlockError, Line bleibt verschlüsselt.
+     */
+    fun unlockLine(password: String): Boolean {
+        if (pendingSaltB64.isEmpty()) return false
+        val provs = try {
+            val key = SecCrypto.deriveKey(password, pendingSaltB64, pendingIterations)
+            pendingCiphers.mapNotNull { p ->
+                val url = SecCrypto.decryptField(key, p.cipherServerUrl, pendingPlayerId)
+                val user = SecCrypto.decryptField(key, p.cipherUsername, pendingPlayerId)
+                val pass = SecCrypto.decryptField(key, p.cipherPassword, pendingPlayerId)
+                if (url.isNotBlank() && user.isNotBlank()) CredStore.Creds(url, user, pass) else null
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+        if (provs.isEmpty()) {
+            unlockError = "❌ Passwort falsch — die Line bleibt verschlüsselt."
+            return false
+        }
+        // RAM: Session setzen, damit Kanäle/Streams sofort geladen werden
+        creds = provs.first()
+        allProviders = provs
+        apis = provs.map { buildApi(it) }
+        api = apis.firstOrNull()
+        // Platte: plain in den Encrypted-Prefs — nächster Start ohne Passwort
+        CredStore.saveAll(getApplication(), provs)
+        android.util.Log.d("SmartysIPTV", "Line entschlüsselt: ${provs.size} Provider, plain gespeichert")
+        unlockError = ""
+        pendingSaltB64 = ""
+        pendingCiphers = emptyList()
+        loadContent()
+        return true
+    }
 
     /** Sendet Support-Anfrage ans Backend (landet als Mail beim Admin). */
     fun sendSupport(mac: String, message: String): Boolean = runCatching {
