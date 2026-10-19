@@ -4,6 +4,7 @@
 build/
 app/build/
 */build/
+*.apk
 
 # ---------- Lokale Gradle-Distribution (Wrapper nicht eingecheckt) ----------
 gradle-8.14.3/

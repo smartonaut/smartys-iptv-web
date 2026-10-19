@@ -17,6 +17,16 @@ import licensing
 import crypto
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)  # keine offene API-Doku
+# CORS: webOS-App (TV) + Browser-Views rufen die App-API cross-origin ab.
+# Ohne dieses Middleware-Set blockieren WebKit/Browser die Response-Lesung
+# ("Keine Verbindung" im Player), obwohl die API korrekt antwortet.
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 app.add_middleware(SessionMiddleware, secret_key=os.environ["SESSION_SECRET"], max_age=12 * 3600,
                    same_site="lax", https_only=True)
 

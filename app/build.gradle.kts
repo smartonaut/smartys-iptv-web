@@ -18,6 +18,29 @@ android {
         versionName = "0.8.6"
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
+    flavorDimensions += "target"
+    productFlavors {
+        // FireTV / Android TV: unverändert wie bisher (v0.8.6, EncryptedSharedPreferences).
+        create("tv") {
+            dimension = "target"
+            applicationId = "com.smartys.iptv"
+            buildConfigField("boolean", "USE_KEYSTORE_STORE", "false")
+        }
+        // Handy (Android 16): eigene App-ID, Keystore-Speicher (Crash-Fix).
+        create("phone") {
+            dimension = "target"
+            applicationId = "com.smartys.iptv.mobile"
+            minSdk = 23
+            versionCode = 28
+            versionName = "0.8.8"
+            buildConfigField("boolean", "USE_KEYSTORE_STORE", "true")
+        }
+    }
+
     signingConfigs {
         create("release") {
             val props = Properties().apply {
