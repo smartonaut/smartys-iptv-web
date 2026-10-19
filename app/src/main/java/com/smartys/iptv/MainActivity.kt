@@ -788,6 +788,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
     var cacheWarn by remember { mutableStateOf(false) }
     var storageTick by remember { mutableStateOf(0) }
     var lookback by remember { mutableStateOf(PlayPrefs.lookback(ctx)) }
+    var bufferSec by remember { mutableStateOf(PlayPrefs.bufferSec(ctx)) }
     val recs = remember(storageTick) {
         if (recDir.exists()) recDir.listFiles()?.filter { it.length() > 0 }
             ?.sortedByDescending { it.lastModified() } ?: emptyList()
@@ -851,6 +852,49 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
                                 color = Color(0xFF6B7A99), fontSize = 10.sp)
                         }
                     }
+                }
+            }
+        }
+
+        item {
+            Section("Cache & Gerät") {
+                val devMax = DeviceCap.maxBufferSec(ctx)
+                InfoRow("Arbeitsspeicher (RAM)", DeviceCap.ramText())
+                InfoRow("Decoder-Speicher (CMA)", DeviceCap.cmaText())
+                InfoRow("Freier App-Speicher", DeviceCap.freeText(ctx))
+                InfoRow("Gerät schafft", "bis $devMax s Cache")
+                Spacer(Modifier.height(12.dp))
+                Text("Live-TV-Puffer (Cache-Dauer)", color = Color(0xFFE8EEFC), fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    listOf(0, 15, 30, 45).forEach { sec ->
+                        BtnSmall(if (sec == 0) "Auto" else "$sec s", selected = bufferSec == sec) {
+                            bufferSec = sec
+                            PlayPrefs.setBufferSec(ctx, sec)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    listOf(60, 90, 120).forEach { sec ->
+                        BtnSmall("$sec s", selected = bufferSec == sec) {
+                            bufferSec = sec
+                            PlayPrefs.setBufferSec(ctx, sec)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                when {
+                    bufferSec == 0 ->
+                        Text("Auto: das Gerät wählt selbst (max. $devMax s).",
+                            color = Color(0xFF6B7A99), fontSize = 12.sp)
+                    bufferSec > devMax ->
+                        Text("⚠ $bufferSec s gewählt — dieses Gerät schafft nur $devMax s. " +
+                             "Wird auf $devMax s begrenzt.",
+                            color = Color(0xFFFFC94D), fontSize = 12.sp)
+                    else ->
+                        Text("✓ $bufferSec s — vom Gerät verkraftbar. Gilt ab dem nächsten Kanalstart.",
+                            color = Color(0xFF8FD694), fontSize = 12.sp)
                 }
             }
         }
@@ -978,7 +1022,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
                     scope.launch {
                         runCatching {
                             ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse(panelUrl.ifBlank { "http://192.168.4.136:884/panel" })))
+                                android.net.Uri.parse(panelUrl.ifBlank { "https://panel.smartys.tech" })))
                         }
                     }
                 }
@@ -987,7 +1031,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
 
         item {
             Spacer(Modifier.height(4.dp))
-            Text("Smarty Player v0.8.0 (Build 20) · panel.smartys.tech · Kontakt: support@smartys.tech",
+            Text("Smarty Player v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE}) · panel.smartys.tech · Kontakt: support@smartys.tech",
                 color = Color(0xFF4A5878), fontSize = 12.sp)
         }
     }

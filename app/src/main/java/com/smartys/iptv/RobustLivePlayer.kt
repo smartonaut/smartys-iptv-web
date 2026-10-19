@@ -73,13 +73,31 @@ class RobustLivePlayer(ctx: Context) {
     /** Timeshift: wie weit man bei pausiertem Live-TV zurueckspulen darf (0 = Standard). */
     private val liveLookbackMs = PlayPrefs.lookback(ctx).toInt()
 
+    /**
+     * Nutzer-Einstellung (Sekunden, 0 = automatisch), hart gedeckelt auf das,
+     * was dieses Geraet laut DeviceCap verkraftet. Ein zu grosser Puffer kippt
+     * auf schwachen Boxen den Hardware-Decoder ("Source error"). Gilt pro
+     * Player-Instanz, also ab dem naechsten Kanalstart.
+     */
+    private val requestedBufferSec: Int = PlayPrefs.bufferSec(ctx)
+    private val deviceMaxBufferMs: Int = DeviceCap.maxBufferSec(ctx) * 1000
+    private val minBufferMs: Int = minOf(bufferDurations[0], deviceMaxBufferMs)
+    private val maxBufferMs: Int = run {
+        val requestedMs = if (requestedBufferSec > 0) requestedBufferSec * 1000 else bufferDurations[1]
+        val capped = minOf(maxOf(requestedMs, minBufferMs), deviceMaxBufferMs)
+        val withLookback = maxOf(capped, liveLookbackMs)
+        Log.i("SmartysIPTV", "Puffer: gewaehlt=${requestedBufferSec}s auto=${bufferDurations[1] / 1000}s " +
+                "geraet=${deviceMaxBufferMs / 1000}s -> ${withLookback / 1000}s")
+        withLookback
+    }
+
     val player: ExoPlayer = ExoPlayer.Builder(ctx)
         .setTrackSelector(DefaultTrackSelector(ctx))
         .setLoadControl(
             DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                    bufferDurations[0],
-                    maxOf(bufferDurations[1], liveLookbackMs),
+                    minBufferMs,
+                    maxBufferMs,
                     bufferDurations[2],
                     bufferDurations[3]
                 )
@@ -233,5 +251,11 @@ object PlayPrefs {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong("live_lookback_ms", 0L)
     fun setLookback(ctx: Context, ms: Long) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong("live_lookback_ms", ms).apply()
+    }
+    /** Live-TV-Puffer in Sekunden (0 = automatisch nach Geraetefaehigkeit). */
+    fun bufferSec(ctx: Context): Int =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("buffer_sec", 0)
+    fun setBufferSec(ctx: Context, sec: Int) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt("buffer_sec", sec).apply()
     }
 }
