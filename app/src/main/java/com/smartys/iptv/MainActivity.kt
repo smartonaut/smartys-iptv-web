@@ -89,6 +89,13 @@ fun setSystemBarsHidden(context: Context, hidden: Boolean) {
     else controller.show(WindowInsetsCompat.Type.systemBars())
 }
 
+/** Hält den Bildschirm wach — verhindert den FireTV-Bildschirmschoner beim Schauen. */
+fun keepScreenOn(context: Context, on: Boolean) {
+    val activity = context as? Activity ?: return
+    if (on) activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    else activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+}
+
 /** Hängt Touch-Gesten an die Player-View: Doppel-Tap = Vollbild, Einfach-Tap = OSD. */
 fun attachPlayerGestures(view: android.view.View, onTap: () -> Unit, onDoubleTap: () -> Unit) {
     val detector = GestureDetector(view.context, object : GestureDetector.SimpleOnGestureListener() {
@@ -556,9 +563,14 @@ fun VodPlayerScreen(
     var fullscreen by remember { mutableStateOf(false) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
-    // Beim Verlassen des Players (Back) die System-Bars wieder zeigen.
+    // Bildschirm anlassen (FireTV: kein Bildschirmschoner beim Schauen);
+    // beim Verlassen des Players die System-Bars wieder zeigen.
     DisposableEffect(Unit) {
-        onDispose { setSystemBarsHidden(ctx, false) }
+        keepScreenOn(ctx, true)
+        onDispose {
+            setSystemBarsHidden(ctx, false)
+            keepScreenOn(ctx, false)
+        }
     }
 
     // OSD nach kurzer Zeit automatisch ausblenden.
@@ -1864,9 +1876,14 @@ fun PlayerScreen(
     var showMenu by remember { mutableStateOf(false) }
     var fullscreen by remember { mutableStateOf(false) }
 
-    // Beim Verlassen des Players (Back) die System-Bars wieder zeigen.
+    // Bildschirm anlassen (FireTV: kein Bildschirmschoner beim Schauen);
+    // beim Verlassen des Players die System-Bars wieder zeigen.
     DisposableEffect(Unit) {
-        onDispose { setSystemBarsHidden(appCtx, false) }
+        keepScreenOn(appCtx, true)
+        onDispose {
+            setSystemBarsHidden(appCtx, false)
+            keepScreenOn(appCtx, false)
+        }
     }
 
     fun toggleRecording() {
