@@ -51,6 +51,11 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import android.app.Activity
+import android.view.GestureDetector
+import android.view.MotionEvent
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : ComponentActivity() {
 
@@ -74,6 +79,23 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+/** Blendet die System-Bars (Status + Navigation) ein/aus — Handy-Vollbild. */
+fun setSystemBarsHidden(context: Context, hidden: Boolean) {
+    val activity = context as? Activity ?: return
+    val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+    if (hidden) controller.hide(WindowInsetsCompat.Type.systemBars())
+    else controller.show(WindowInsetsCompat.Type.systemBars())
+}
+
+/** Hängt Touch-Gesten an die Player-View: Doppel-Tap = Vollbild, Einfach-Tap = OSD. */
+fun attachPlayerGestures(view: android.view.View, onTap: () -> Unit, onDoubleTap: () -> Unit) {
+    val detector = GestureDetector(view.context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean { onTap(); return true }
+        override fun onDoubleTap(e: MotionEvent): Boolean { onDoubleTap(); return true }
+    })
+    view.setOnTouchListener { _, ev -> detector.onTouchEvent(ev) }
 }
 
 /**
@@ -531,6 +553,13 @@ fun VodPlayerScreen(
     var showOsd by remember { mutableStateOf(false) }
     var osdMsg by remember { mutableStateOf("") }
     var textureView by remember { mutableStateOf<android.view.TextureView?>(null) }
+    var fullscreen by remember { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+
+    // Beim Verlassen des Players (Back) die System-Bars wieder zeigen.
+    DisposableEffect(Unit) {
+        onDispose { setSystemBarsHidden(ctx, false) }
+    }
 
     // OSD nach kurzer Zeit automatisch ausblenden.
     LaunchedEffect(showOsd) {
@@ -616,18 +645,33 @@ fun VodPlayerScreen(
         // Zusatz-Overhead, wichtig für schwache Geräte (Fire TV Stick).
         if (hasNextEpisode) {
             AndroidView(
-                factory = { ctx ->
-                    android.view.TextureView(ctx).also { tv ->
+                factory = { viewCtx ->
+                    android.view.TextureView(viewCtx).also { tv ->
                         textureView = tv
                         player?.setVideoTextureView(tv)
+                        attachPlayerGestures(tv,
+                            onTap = { showOsd = !showOsd },
+                            onDoubleTap = {
+                                fullscreen = !fullscreen
+                                setSystemBarsHidden(ctx, fullscreen)
+                            })
                     }
                 },
                 modifier = Modifier.fillMaxSize()
             )
         } else {
             AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply { this.player = player; useController = false }
+                factory = { viewCtx ->
+                    PlayerView(viewCtx).apply {
+                        this.player = player
+                        useController = false
+                        attachPlayerGestures(this,
+                            onTap = { showOsd = !showOsd },
+                            onDoubleTap = {
+                                fullscreen = !fullscreen
+                                setSystemBarsHidden(ctx, fullscreen)
+                            })
+                    }
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -1006,6 +1050,7 @@ private fun ProfileSwitcher(ctx: Context, onResult: (String, String) -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BtnSmall(text: String, selected: Boolean = false, danger: Boolean = false, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     val fg = when {
         danger -> Color(0xFFFFB3B3)
         selected -> Color(0xFF1A1205)
@@ -1020,8 +1065,13 @@ private fun BtnSmall(text: String, selected: Boolean = false, danger: Boolean = 
         onClick = onClick,
         shape = RoundedCornerShape(9.dp),
         color = bg,
-        border = androidx.compose.foundation.BorderStroke(1.dp,
-            if (selected) Color(0xFFFFC94D) else if (danger) Color(0xFF5A3A3A) else Color(0xFF3A4666))
+        border = when {
+            focused -> androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D))
+            selected -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
+            danger -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF5A3A3A))
+            else -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
+        },
+        modifier = Modifier.focusable().onFocusChanged { focused = it.isFocused }
     ) {
         Text(text, color = fg, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp))
@@ -1812,6 +1862,12 @@ fun PlayerScreen(
     val appCtx = androidx.compose.ui.platform.LocalContext.current
     var recording by remember { mutableStateOf(Recorder.active()) }
     var showMenu by remember { mutableStateOf(false) }
+    var fullscreen by remember { mutableStateOf(false) }
+
+    // Beim Verlassen des Players (Back) die System-Bars wieder zeigen.
+    DisposableEffect(Unit) {
+        onDispose { setSystemBarsHidden(appCtx, false) }
+    }
 
     fun toggleRecording() {
         if (recording) {
@@ -1889,10 +1945,16 @@ fun PlayerScreen(
             }
     ) {
         AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
+            factory = { viewCtx ->
+                PlayerView(viewCtx).apply {
                     this.player = player
                     useController = false
+                    attachPlayerGestures(this,
+                        onTap = { showOverlay = !showOverlay },
+                        onDoubleTap = {
+                            fullscreen = !fullscreen
+                            setSystemBarsHidden(appCtx, fullscreen)
+                        })
                 }
             },
             modifier = Modifier.fillMaxSize()

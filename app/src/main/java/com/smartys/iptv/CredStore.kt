@@ -1,12 +1,18 @@
 package com.smartys.iptv
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 /**
  * Speichert die Xtream-Zugangsdaten verschlüsselt auf dem Gerät.
  * NICHT im Klartext, NICHT hardcodiert.
+ *
+ * Zwei Speicher-Pfade, gesteuert über BuildConfig.USE_KEYSTORE_STORE:
+ *  - tv-Flavor (FireTV): EncryptedSharedPreferences (unverändert, wie v0.8.6).
+ *  - phone-Flavor (Handy, Android 16): direkter Android-Keystore
+ *    (SecureStore) — EncryptedSharedPreferences crasht auf Android 15/16.
  */
 object CredStore {
 
@@ -18,16 +24,34 @@ object CredStore {
     private const val K_PLAYER_ID = "player_id"
     private const val K_PAIRING_PW = "pairing_pw"
 
-    private fun prefs(ctx: Context) =
-        EncryptedSharedPreferences.create(
-            ctx,
-            PREFS,
-            MasterKey.Builder(ctx)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build(),
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+    private val useKeystore = BuildConfig.USE_KEYSTORE_STORE
+
+    private fun prefs(ctx: Context): SharedPreferences =
+        if (useKeystore) {
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        } else {
+            EncryptedSharedPreferences.create(
+                ctx,
+                PREFS,
+                MasterKey.Builder(ctx)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build(),
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        }
+
+    /** Schreibt einen Wert verschlüsselt (phone) bzw. via EncryptedPrefs (tv). */
+    private fun putSecure(p: SharedPreferences, key: String, value: String) {
+        val stored = if (useKeystore) (SecureStore.encrypt(value) ?: value) else value
+        p.edit().putString(key, stored).commit()
+    }
+
+    /** Liest einen Wert entschlüsselt zurück. null wenn nicht vorhanden. */
+    private fun getSecure(p: SharedPreferences, key: String): String? {
+        val stored = p.getString(key, null) ?: return null
+        return if (useKeystore) (SecureStore.decrypt(stored) ?: stored) else stored
+    }
 
     /**
      * Player-ID: rein kryptographischer Zufall (SecureRandom), 6 Bytes im
@@ -44,7 +68,7 @@ object CredStore {
     @Synchronized
     fun playerId(ctx: Context): String {
         val p = prefs(ctx)
-        p.getString(K_PLAYER_ID, null)?.let { return it }
+        getSecure(p, K_PLAYER_ID)?.let { return it }
         val bytes = ByteArray(6)
         java.security.SecureRandom().nextBytes(bytes)
         bytes[0] = ((bytes[0].toInt() and 0xFE) or 0x02).toByte()   // lokal administriert
@@ -52,7 +76,7 @@ object CredStore {
         // commit() statt apply(): synchrone Disk-Speicherung. Die Player-ID ist
         // PAIRING-KRITISCH — ein verlorener async-Write wuerde beim naechsten
         // Start eine NEUE ID generieren und die Web-Registrierung entkoppeln.
-        p.edit().putString(K_PLAYER_ID, id).commit()
+        putSecure(p, K_PLAYER_ID, id)
         return id
     }
 
@@ -64,7 +88,7 @@ object CredStore {
     @Synchronized
     fun pairingPw(ctx: Context): String {
         val p = prefs(ctx)
-        p.getString(K_PAIRING_PW, null)?.let { return it }
+        getSecure(p, K_PAIRING_PW)?.let { return it }
         val CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
         val rnd = java.security.SecureRandom()
         val sb = StringBuilder(12)
@@ -74,7 +98,7 @@ object CredStore {
         val pw = sb.toString()
         // commit() wie bei der Player-ID: Pairing-Passwort darf niemals durch
         // einen verlorenen async-Write "neu generiert" werden.
-        p.edit().putString(K_PAIRING_PW, pw).commit()
+        putSecure(p, K_PAIRING_PW, pw)
         return pw
     }
 
@@ -88,15 +112,14 @@ object CredStore {
         providers.forEach { c ->
             arr.put(org.json.JSONObject().put("url", c.url).put("user", c.user).put("pass", c.pass))
         }
-        prefs(ctx).edit().putString(K_PROVIDERS, arr.toString()).apply()
+        putSecure(prefs(ctx), K_PROVIDERS, arr.toString())
         // Legacy-Einzelfelder weiterhin pflegen (primary = erster) für Rückwärtskompatibilität
         val first = providers.firstOrNull()
         if (first != null) {
-            prefs(ctx).edit()
-                .putString(K_URL, first.url.trim().trimEnd('/'))
-                .putString(K_USER, first.user.trim())
-                .putString(K_PASS, first.pass)
-                .apply()
+            val p = prefs(ctx)
+            putSecure(p, K_URL, first.url.trim().trimEnd('/'))
+            putSecure(p, K_USER, first.user.trim())
+            putSecure(p, K_PASS, first.pass)
         }
     }
 
@@ -117,16 +140,16 @@ object CredStore {
 
     fun load(ctx: Context): Creds? {
         val p = prefs(ctx)
-        val url = p.getString(K_URL, null) ?: return null
-        val user = p.getString(K_USER, null) ?: return null
-        val pass = p.getString(K_PASS, null) ?: return null
+        val url = getSecure(p, K_URL) ?: return null
+        val user = getSecure(p, K_USER) ?: return null
+        val pass = getSecure(p, K_PASS) ?: return null
         return Creds(url, user, pass)
     }
 
     /** Lädt ALLE gespeicherten Provider (JSON); Fallback auf Legacy-Einzelfeld. */
     fun loadAll(ctx: Context): List<Creds> {
         val p = prefs(ctx)
-        val json = p.getString(K_PROVIDERS, null)
+        val json = getSecure(p, K_PROVIDERS)
         if (json != null) {
             return runCatching {
                 val arr = org.json.JSONArray(json)
