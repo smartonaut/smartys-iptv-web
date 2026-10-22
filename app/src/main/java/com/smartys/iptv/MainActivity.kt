@@ -9,7 +9,10 @@ import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,7 +76,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 ScaledUi {
-                    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    // DECKENDER Root-Hintergrund: ohne ihn malt Compose nur die
+                    // geänderten Regionen. Auf dem Fire-TV-Stick (Fire OS 6 /
+                    // API 25) bleiben beim Screen-Wechsel die alten Pixel stehen —
+                    // das "Überlagern" von Prüfen-Screen und Passwort-Eingabe.
+                    // Hintergrund VOR dem Insets-Padding, damit die volle
+                    // Fensterfläche neu gezeichnet wird.
+                    Box(
+                        Modifier.fillMaxSize()
+                            .background(Color(0xFF0B0E14))
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                    ) {
                         App(autoUrl = autoUrl, autoUser = autoUser, autoPass = autoPass)
                     }
                 }
@@ -118,13 +132,15 @@ fun ScaledUi(content: @Composable () -> Unit) {
     val base = LocalDensity.current
     val shortSide = minOf(config.screenWidthDp, config.screenHeightDp).toFloat()
     val scale = (shortSide / 540f).coerceIn(0.5f, 1f)
-    // NUR density skalieren (dp: Cover/Buttons/Layout). fontScale gegenläufig,
-    // damit sp-Texte ihre Größe BEHALTEN — sp hängt von density UND fontScale
-    // ab, sonst würde der Text doppelt verkleinert und unlesbar.
-    // Auf kleinen Screens zusätzlich ein leichtes Absenken (0.9), damit der
-    // Text etwas kompakter wird — auf Fire-TV (scale 1.0) bleibt er unverändert.
-    val textFactor = if (scale < 1f) 0.9f else 1f
-    val scaled = Density(base.density * scale, (base.fontScale / scale) * textFactor)
+    // dp UND sp skalieren GEMEINSAM: sp = density * fontScale, also reicht es,
+    // die density zu skalieren und fontScale unangetastet zu lassen.
+    // Früher wurde fontScale gegenläufig geteilt (1/scale), damit Schrift
+    // "lesbar" bleibt — auf einem Canvas unter 540 dp schrumpften dann die
+    // Container, während die Schrift gleich groß blieb: Text lief aus den
+    // Zeilen, Überschriften überlagerten sich, Ränder wurden abgeschnitten
+    // (genau das Fehlerbild auf dem Fire-TV-Stick, während der Cube mit
+    // 960x540 dp = scale 1.0 unauffällig bleibt).
+    val scaled = Density(base.density * scale, base.fontScale)
     CompositionLocalProvider(LocalDensity provides scaled) {
         content()
     }
@@ -178,6 +194,15 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     var showEpg by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
 
+    // Player-Lebenszyklus: beim Verlassen wird der Puffer KOMPLETT freigegeben
+    // (shutdown), damit danach gestartete Apps den RAM bekommen. Ein erneuter
+    // Start baut die Instanz frisch auf.
+    fun ensurePlayer(): RobustLivePlayer {
+        val cur = player.value
+        if (cur != null && !cur.released) return cur
+        return RobustLivePlayer(appCtx).also { player.value = it }
+    }
+
     // Position des laufenden VOD-Titels sichern und Playback beenden (Fortsetzen-Feature).
     // Zentral für beide Wege: physische Back-Taste UND "←"-Button im Player.
     fun stopVod() {
@@ -190,7 +215,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         vodPlaying.value = null
         seriesQueue = null
         nextPending = false
-        player.value?.stop()
+        player.value?.shutdown()
     }
 
     // Auto-Save der VOD-Position: alle 2 Minuten sichern, damit auch ein
@@ -233,7 +258,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
             showSettings -> showSettings = false
             showEpg -> showEpg = false
             vodPlaying.value != null -> { stopVod() }
-            playing.value != null -> { playing.value = null; player.value?.stop() }
+            playing.value != null -> { playing.value = null; player.value?.shutdown() }
             openMovie.value != null -> openMovie.value = null
             openSeries.value != null -> openSeries.value = null
             mainTab != "live" -> mainTab = "live"
@@ -269,7 +294,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         if (url != null) {
             playing.value = channel
             vm.markWatched(channel.streamId)
-            player.value?.playChannel(url, channel.streamId)
+            ensurePlayer().playChannel(url, channel.streamId)
         }
     }
 
@@ -281,7 +306,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         advancing = false
         // Fortsetzen: gespeicherte Position beim Start wiederherstellen.
         val resume = if (vod.startPosMs > 0L) vod.startPosMs else ResumeStore.position(appCtx, vod.key)
-        player.value?.playChannel(vod.url, "vod:${vod.title}", startPosMs = resume)
+        ensurePlayer().playChannel(vod.url, "vod:${vod.title}", startPosMs = resume)
     }
 
     // Nächste Episode aus der Queue, oder null wenn keine mehr folgt.
@@ -292,7 +317,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         seriesQueue = null
         nextPending = false
         vodPlaying.value = null
-        player.value?.stop()
+        player.value?.shutdown()
     }
 
     // Abspann erkannt ODER Episode zu Ende: Overlay "Nächste Folge in 5s" zeigen.
@@ -312,7 +337,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         seriesIndex += 1
         val resume = ResumeStore.position(appCtx, next.key)
         vodPlaying.value = next
-        player.value?.playChannel(next.url, "vod:${next.title}", startPosMs = resume)
+        ensurePlayer().playChannel(next.url, "vod:${next.title}", startPosMs = resume)
         advancing = false
     }
 
@@ -325,7 +350,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     // Eine Episode starten. onVodEnded = Fallback, falls kein Abspann erkannt wurde.
     fun startEpisode(ep: VodPlayback, resumeMs: Long = 0L) {
         vodPlaying.value = ep
-        player.value?.playChannel(ep.url, "vod:${ep.title}", startPosMs = resumeMs) {
+        ensurePlayer().playChannel(ep.url, "vod:${ep.title}", startPosMs = resumeMs) {
             if (advanceSuppressed) {
                 endSeriesPlayback()
             } else if (nextEpisode() != null) {
@@ -388,6 +413,8 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
                     ProfileStore.setActive(appCtx, p.id)
                     activeProfile = p
                     vm.reloadProfileState()
+                    // Profil-Bindung: Line des neuen Profils sofort aktiv machen.
+                    vm.applyActiveLine()
                 })
             } else {
                 val cur = playing.value
@@ -412,7 +439,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
                         vm = vm, player = player.value?.player, channel = cur,
                         channels = s.channels,
                         onPlay = play,
-                        onBack = { playing.value = null; player.value?.stop() }
+                        onBack = { playing.value = null; player.value?.shutdown() }
                     )
                     vodCur != null -> VodPlayerScreen(
                         vod = vodCur,
@@ -516,23 +543,28 @@ fun MainTabs(current: String, onChange: (String) -> Unit) {
             Surface(
                 onClick = { onChange(key) },
                 shape = RoundedCornerShape(10.dp),
-                color = if (active) Color(0xFFFFC94D) else Color(0xFF11172A),
+                // Aktiv NICHT gold füllen: eine goldene Fläche verschluckt den
+                // Fokus-Marker (Fire OS 6 malt keinen System-Fokusring).
+                // Aktiv = Goldrahmen + Goldschrift, Fokus = hellere Fläche + 3dp.
+                color = when {
+                    focused -> Color(0xFF232C42)
+                    active -> Color(0xFF1A2238)
+                    else -> Color(0xFF11172A)
+                },
                 border = androidx.compose.foundation.BorderStroke(
-                    if (focused || active) 2.dp else 1.dp,
-                    when {
-                        focused -> Color(0xFFFFC94D)
-                        active -> Color(0xFFFFC94D)
-                        else -> Color(0xFF232C42)
-                    }
+                    // Rahmen = FOKUS (3 dp Gold). Auswahl wird nur ueber die
+                    // Goldschrift gezeigt, damit "aktiv" und "fokussiert" nicht
+                    // gleich aussehen (auf Fire OS 6 gibt es keinen System-Ring).
+                    if (focused) 3.dp else 1.dp,
+                    if (focused) Color(0xFFFFC94D) else Color(0xFF232C42)
                 ),
-                modifier = Modifier
-                    .onFocusChanged { focused = it.isFocused }
-                    .focusable()
+                // Kein extra .focusable(): Surface(onClick) ist bereits fokussierbar
+                modifier = Modifier.onFocusChanged { focused = it.isFocused }
             ) {
                 Text(
                     label,
                     color = when {
-                        active -> Color(0xFF0B0E14)
+                        active -> Color(0xFFFFC94D)
                         focused -> Color(0xFFE8EEFC)
                         else -> Color(0xFF8FA3C8)
                     },
@@ -768,6 +800,55 @@ fun VodPlayerScreen(
     }
 }
 
+/** Fragt den Panel-Status dieser Box ab: (existiert, freigeschaltet) oder null. */
+private fun fetchPanelInfo(mac: String): Pair<Boolean, Boolean>? = try {
+    val url = java.net.URL(
+        "https://panel.smartys.tech/api/v1/player/info?mac=" +
+            java.net.URLEncoder.encode(mac, "UTF-8")
+    )
+    val conn = url.openConnection() as javax.net.ssl.HttpsURLConnection
+    conn.connectTimeout = 6000
+    conn.readTimeout = 6000
+    if (conn.responseCode != 200) {
+        null
+    } else {
+        val o = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        o.optBoolean("exists") to o.optBoolean("active")
+    }
+} catch (_: Exception) {
+    null
+}
+
+/** Lesbarer Gerätename für die Einstellungen ("Fire TV Stick 4K · AFTMM · Android 7.1.2"). */
+private fun deviceModelText(): String {
+    val model = android.os.Build.MODEL.orEmpty()
+    val device = android.os.Build.DEVICE.orEmpty().lowercase()
+    val friendly = when (device) {
+        "mantis" -> "Fire TV Stick 4K"
+        "mustang" -> "Fire TV Stick 4K Max"
+        "sheldon", "sheldonp" -> "Fire TV Stick Lite"
+        "tank" -> "Fire TV Stick (2. Gen)"
+        "aftka" -> "Fire TV Stick (3. Gen)"
+        "raven" -> "Fire TV Cube (2. Gen)"
+        "aftgazl", "gazelle" -> "Fire TV Cube (3. Gen)"
+        "aftt" -> "Fire TV (2. Gen)"
+        else -> when (model.uppercase()) {
+            "AFTMM" -> "Fire TV Stick 4K"
+            "AFTKA" -> "Fire TV Stick (3. Gen)"
+            "AFTKM" -> "Fire TV Stick 4K Max"
+            "AFTA" -> "Fire TV Stick (1. Gen)"
+            "AFTR" -> "Fire TV Cube (2. Gen)"
+            else -> null
+        }
+    }
+    val android = "Android ${android.os.Build.VERSION.RELEASE}"
+    return when {
+        friendly != null && model.isNotBlank() -> "$friendly · $model · $android"
+        model.isNotBlank() -> "$model · $android"
+        else -> android
+    }
+}
+
 // ---------- Einstellungen ----------
 
 @Composable
@@ -778,7 +859,25 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
     val playName = (profileName ?: "Dieser Player")
     val ps = ctx.getSharedPreferences("smartys_panel", Context.MODE_PRIVATE)
     val playerId = ProfileStore.activeId(ctx)
-    val panelUrl = ps.getString("host", "").orEmpty()
+    // Der Panel-Status kam frueher aus der Preference "smartys_panel/host", die
+    // NIRGENDS geschrieben wird -> die Box meldete immer "Nicht mit Panel
+    // verknuepft". Jetzt wird der echte Zustand am Panel abgefragt.
+    var panelInfo by remember { mutableStateOf<Pair<Boolean, Boolean>?>(null) }
+    var panelChecked by remember { mutableStateOf(false) }
+    // Die MAC der Box (nicht die Profil-UUID) ist der Schluessel im Panel.
+    val boxMac = remember { CredStore.playerId(ctx) }
+    val boxPairPw = remember { CredStore.pairingPw(ctx) }
+    LaunchedEffect(boxMac) {
+        if (boxMac.isBlank()) {
+            panelChecked = true
+        } else {
+            panelInfo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                fetchPanelInfo(boxMac)
+            }
+            panelChecked = true
+        }
+    }
+    val panelUrl = "https://panel.smartys.tech"
     val panelPairUrl = panelUrl.trimEnd('/') + "/pair"
 
     val recDir = File(ctx.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES), "Aufnahmen")
@@ -787,8 +886,19 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
     val dlDir = File(ctx.filesDir, "downloads")
     var cacheWarn by remember { mutableStateOf(false) }
     var storageTick by remember { mutableStateOf(0) }
+    // Profil -> Panel-Line: welches Profil bearbeitet gerade seine Bindung?
+    var lineDialogFor by remember { mutableStateOf<Profile?>(null) }
+    var reloadingLines by remember { mutableStateOf(false) }
     var lookback by remember { mutableStateOf(PlayPrefs.lookback(ctx)) }
-    var bufferSec by remember { mutableStateOf(PlayPrefs.bufferSec(ctx)) }
+    // Nie mehr als die Hardware schafft: ein zu grosser Puffer kippt auf
+    // schwachen Boxen den Hardware-Decoder ("Source error").
+    var bufferSec by remember {
+        val cap = DeviceCap.maxBufferSec(ctx)
+        val saved = PlayPrefs.bufferSec(ctx)
+        val clamped = saved.coerceIn(0, cap)
+        if (clamped != saved) PlayPrefs.setBufferSec(ctx, clamped)
+        mutableStateOf(clamped)
+    }
     val recs = remember(storageTick) {
         if (recDir.exists()) recDir.listFiles()?.filter { it.length() > 0 }
             ?.sortedByDescending { it.lastModified() } ?: emptyList()
@@ -813,44 +923,155 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
 
         item {
             Section("Profil") {
-                InfoRow("Aktives Profil", playName)
+                val profiles = remember { ProfileStore.list(ctx) }
+                val activeId = ProfileStore.activeId(ctx)
+                val availableLines = vm.lines()
+                profiles.forEach { prof ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                prof.name + if (prof.id == activeId) "  ·  aktiv" else "",
+                                color = if (prof.id == activeId) Color(0xFFFFC94D) else Color(0xFFE8EEFC),
+                                fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Line: " + (vm.lineLabelFor(prof.id) ?: "Automatisch"),
+                                color = Color(0xFF8FA3C8), fontSize = 12.sp
+                            )
+                        }
+                        BtnSmall("Line wählen") { lineDialogFor = prof }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (availableLines.isEmpty()) "Keine Lines geladen."
+                    else "Lines (${availableLines.size}): " +
+                        availableLines.joinToString(" · ") { it.second } +
+                        "   — aktiv: " + (vm.lineLabelFor(activeId ?: "") ?: "Automatisch"),
+                    color = Color(0xFF6B7A99), fontSize = 11.sp
+                )
                 Spacer(Modifier.height(10.dp))
+                // Lines neu vom Panel ziehen (z. B. nachdem im Panel eine Line
+                // hinzugekommen ist) — wie im Desktop. Verschlüsselte Lines
+                // landen im Unlock-Screen (dort Passwort eingeben).
+                BtnSmall(if (reloadingLines) "lade Lines …" else "🔄 Lines vom Panel neu laden") {
+                    if (!reloadingLines) {
+                        reloadingLines = true
+                        scope.launch {
+                            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                vm.pairAndLoad(boxMac, boxPairPw)
+                            }
+                            reloadingLines = false
+                            if (!ok && vm.unlockNeeded) {
+                                onClose()
+                                vm.requestPairingScreen()
+                            } else if (ok) {
+                                vm.applyActiveLine()
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 BtnSmall("Profil wechseln (alle Profile)") { onSwitchProfile() }
+
+                // Auswahl: welche Line (Panel-Provider) gehoert zu diesem Profil?
+                lineDialogFor?.let { prof ->
+                    AlertDialog(
+                        onDismissRequest = { lineDialogFor = null },
+                        title = {
+                            Text("Line für ${prof.name}",
+                                color = Color(0xFFE8EEFC), fontSize = 18.sp)
+                        },
+                        text = {
+                            Column {
+                                Text("Welche Line aus dem Panel nutzt dieses Profil?",
+                                    color = Color(0xFF8FA3C8), fontSize = 13.sp)
+                                Spacer(Modifier.height(10.dp))
+                                BtnSmall("Automatisch (alle Lines)",
+                                    selected = vm.lineLabelFor(prof.id) == null) {
+                                    vm.setProfileLine(prof.id, null)
+                                    lineDialogFor = null
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                availableLines.forEach { (idx, label) ->
+                                    BtnSmall(label, selected = vm.lineLabelFor(prof.id) == label) {
+                                        vm.setProfileLine(prof.id, idx)
+                                        lineDialogFor = null
+                                    }
+                                    Spacer(Modifier.height(6.dp))
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { lineDialogFor = null }) {
+                                Text("Fertig", color = Color(0xFFFFC94D), fontSize = 15.sp)
+                            }
+                        },
+                        containerColor = Color(0xFF10141F)
+                    )
+                }
             }
         }
 
         item {
             Section("Mein Player") {
-                val onPanel = panelUrl.isNotBlank() && playerId != null
+                val linked = panelInfo?.first == true
+                val active = panelInfo?.second == true
+                val statusText = when {
+                    !panelChecked -> "Prüfe Panel-Verbindung …"
+                    boxMac.isBlank() -> "Nicht mit Panel verknüpft"
+                    panelInfo == null -> "Panel nicht erreichbar — Status unbekannt"
+                    !linked -> "Nicht mit Panel verknüpft"
+                    active -> "Verbunden mit Panel"
+                    else -> "Im Panel vorhanden — noch nicht freigeschaltet"
+                }
+                val statusColor = when {
+                    !panelChecked || panelInfo == null -> Color(0xFF6B7A99)
+                    linked && active -> Color(0xFF4ADE80)
+                    linked -> Color(0xFFFFC94D)
+                    else -> Color(0xFF6B7A99)
+                }
+                val pairPw = remember { CredStore.pairingPw(ctx) }
+                // Vollständige Pairing-URL: MAC + Passwort dieser Box. Damit kommt
+                // man nach dem Scannen direkt in den richtigen Panel-Eintrag —
+                // zum Ändern der Line, ohne die Nummer abzutippen.
+                val pairUrl = "https://panel.smartys.tech/pair?mac=" +
+                    java.net.URLEncoder.encode(boxMac, "UTF-8") + "&pw=" +
+                    java.net.URLEncoder.encode(pairPw, "UTF-8")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Diese Box", color = Color(0xFF8FA3C8), fontSize = 12.sp)
+                        Text("Profil", color = Color(0xFF8FA3C8), fontSize = 12.sp)
                         Text(playName, color = Color(0xFFE8EEFC), fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (playerId != null) {
-                            Text("ID: $playerId", color = Color(0xFF6B7A99), fontSize = 12.sp)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-                            Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(
-                                if (onPanel) Color(0xFF4ADE80) else Color(0xFF6B7A99)))
+                        Text("Gerät: ${deviceModelText()}",
+                            color = Color(0xFF8FA3C8), fontSize = 13.sp)
+                        Text("MAC: " + if (boxMac.isBlank()) "—" else boxMac,
+                            color = Color(0xFFE8EEFC), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text("Pairing-Passwort: $pairPw",
+                            color = Color(0xFFE8EEFC), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                            Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(statusColor))
                             Spacer(Modifier.width(8.dp))
-                            Text(if (onPanel) "Verbunden mit Panel" else "Nicht mit Panel verknüpft",
-                                color = if (onPanel) Color(0xFF8FA3C8) else Color(0xFFFFB74D), fontSize = 13.sp)
+                            Text(statusText, color = statusColor, fontSize = 13.sp)
                         }
+                        Spacer(Modifier.height(6.dp))
+                        Text("Zum Ändern der Line: QR scannen (öffnet das Panel mit dieser Box) " +
+                             "oder panel.smartys.tech öffnen.",
+                            color = Color(0xFF6B7A99), fontSize = 11.sp)
                     }
-                    // QR-Code: neu gekoppelt, wenn die Box nicht im Panel erscheint
-                    if (onPanel) {
-                        Spacer(Modifier.width(20.dp))
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(
-                                Modifier.size(140.dp).background(Color.White, shape = RoundedCornerShape(8.dp))
-                                    .padding(8.dp)
-                            ) {
-                                QrCode(panelPairUrl, size = 124.dp)
-                            }
-                            Text("Neu koppeln: QR scannen (Panel → Player)",
-                                color = Color(0xFF6B7A99), fontSize = 10.sp)
+                    Spacer(Modifier.width(20.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            Modifier.size(150.dp).background(Color.White, shape = RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                        ) {
+                            QrCode(pairUrl, size = 134.dp)
                         }
+                        Spacer(Modifier.height(4.dp))
+                        Text("Panel-Zugang · Änderungen", color = Color(0xFF6B7A99), fontSize = 10.sp)
                     }
                 }
             }
@@ -866,35 +1087,22 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
                 Spacer(Modifier.height(12.dp))
                 Text("Live-TV-Puffer (Cache-Dauer)", color = Color(0xFFE8EEFC), fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf(0, 15, 30, 45).forEach { sec ->
-                        BtnSmall(if (sec == 0) "Auto" else "$sec s", selected = bufferSec == sec) {
-                            bufferSec = sec
-                            PlayPrefs.setBufferSec(ctx, sec)
-                        }
+                BufferSlider(
+                    value = bufferSec,
+                    max = devMax,
+                    onChange = { sec ->
+                        bufferSec = sec
+                        PlayPrefs.setBufferSec(ctx, sec)
                     }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    listOf(60, 90, 120).forEach { sec ->
-                        BtnSmall("$sec s", selected = bufferSec == sec) {
-                            bufferSec = sec
-                            PlayPrefs.setBufferSec(ctx, sec)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                when {
-                    bufferSec == 0 ->
-                        Text("Auto: das Gerät wählt selbst (max. $devMax s).",
-                            color = Color(0xFF6B7A99), fontSize = 12.sp)
-                    bufferSec > devMax ->
-                        Text("⚠ $bufferSec s gewählt — dieses Gerät schafft nur $devMax s. " +
-                             "Wird auf $devMax s begrenzt.",
-                            color = Color(0xFFFFC94D), fontSize = 12.sp)
-                    else ->
-                        Text("✓ $bufferSec s — vom Gerät verkraftbar. Gilt ab dem nächsten Kanalstart.",
-                            color = Color(0xFF8FD694), fontSize = 12.sp)
+                )
+                Spacer(Modifier.height(6.dp))
+                if (bufferSec == 0) {
+                    Text("Auto: das Gerät wählt selbst (bis $devMax s). Links/Rechts stellt die Sekunden ein.",
+                        color = Color(0xFF6B7A99), fontSize = 12.sp)
+                } else {
+                    Text("$bufferSec s von maximal $devMax s (mehr schafft diese Box nicht). " +
+                         "Gilt ab dem nächsten Kanalstart.",
+                        color = Color(0xFF8FD694), fontSize = 12.sp)
                 }
             }
         }
@@ -1103,17 +1311,82 @@ private fun ProfileSwitcher(ctx: Context, onResult: (String, String) -> Unit) {
     }
 }
 
+/**
+ * Cache-Regler im Desktop-Stil, aber D-Pad-tauglich (Fire OS 6 zeigt keinen
+ * System-Fokus): Links/Rechts ändert die Sekunden, der Rahmen zeigt den Fokus.
+ * max = harte Gerätegrenze (DeviceCap.maxBufferSec) — höher geht es nicht.
+ */
+@Composable
+private fun BufferSlider(value: Int, max: Int, onChange: (Int) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    var trackW by remember { mutableStateOf(0) }
+    val frac = if (max > 0) (value.toFloat() / max.toFloat()).coerceIn(0f, 1f) else 0f
+    val thumbPx = with(LocalDensity.current) { 18.dp.toPx() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .onKeyEvent { e ->
+                if (e.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (e.key) {
+                    Key.DirectionLeft -> { onChange((value - 1).coerceIn(0, max)); true }
+                    Key.DirectionRight -> { onChange((value + 1).coerceIn(0, max)); true }
+                    else -> false
+                }
+            }
+            .then(
+                if (focused) Modifier.border(3.dp, Color(0xFFFFC94D), RoundedCornerShape(10.dp))
+                else Modifier.border(1.dp, Color(0xFF3A4666), RoundedCornerShape(10.dp))
+            )
+            .background(if (focused) Color(0xFF232C42) else Color(0xFF141A2A), RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.weight(1f).height(28.dp).onSizeChanged { trackW = it.width }) {
+            Box(
+                Modifier.align(Alignment.CenterStart).fillMaxWidth().height(6.dp)
+                    .background(Color(0xFF2A3450), RoundedCornerShape(3.dp))
+            )
+            Box(
+                Modifier.align(Alignment.CenterStart).fillMaxWidth(frac).height(6.dp)
+                    .background(Color(0xFFFFC94D), RoundedCornerShape(3.dp))
+            )
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .offset { IntOffset(((trackW - thumbPx) * frac).toInt(), 0) }
+                    .size(18.dp)
+                    .background(Color(0xFFFFC94D), CircleShape)
+                    .border(3.dp, Color(0xFF0B0E14), CircleShape)
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(
+            if (value <= 0) "aus" else "$value s",
+            color = if (focused) Color(0xFFFFC94D) else Color(0xFFE8EEFC),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.widthIn(min = 52.dp)
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BtnSmall(text: String, selected: Boolean = false, danger: Boolean = false, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
+    // KEINE gold gefüllten Buttons mehr: eine goldene Fläche verschluckt den
+    // Fokus-Marker (Fire OS 6 zeichnet keinen System-Fokusring). Auswahl wird
+    // über Goldschrift + Goldrahmen gezeigt, der Fokus über hellere Fläche + 3 dp.
     val fg = when {
         danger -> Color(0xFFFFB3B3)
-        selected -> Color(0xFF1A1205)
+        selected -> Color(0xFFFFC94D)
         else -> Color(0xFFE8EEFC)
     }
     val bg = when {
-        selected -> Color(0xFFFFC94D)
+        focused -> Color(0xFF232C42)
+        selected -> Color(0xFF1A2238)
         danger -> Color(0xFF2A1A1A)
         else -> Color(0xFF141A2A)
     }
@@ -1122,12 +1395,16 @@ private fun BtnSmall(text: String, selected: Boolean = false, danger: Boolean = 
         shape = RoundedCornerShape(9.dp),
         color = bg,
         border = when {
-            focused -> androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D))
-            selected -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
+            // Nur der Fokus bekommt den Goldrahmen; "ausgewaehlt" ist an der
+            // Goldschrift erkennbar. Sonst wirken Auswahl und Fokus gleich.
+            focused -> androidx.compose.foundation.BorderStroke(3.dp, Color(0xFFFFC94D))
             danger -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF5A3A3A))
             else -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
         },
-        modifier = Modifier.focusable().onFocusChanged { focused = it.isFocused }
+        // KEIN zusätzliches .focusable(): Surface(onClick=…) ist schon fokussierbar,
+        // ein zweiter Fokus-Knoten lässt onFocusChanged den falschen Knoten melden
+        // (Fokus-Marker erscheint nie / auf allen Buttons gleichzeitig).
+        modifier = Modifier.onFocusChanged { focused = it.isFocused }
     ) {
         Text(text, color = fg, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp))
@@ -1138,24 +1415,29 @@ private fun BtnSmall(text: String, selected: Boolean = false, danger: Boolean = 
 // ---------- QR-Code (ZXing BitMatrix auf weiße Fläche, ohne UI-Abhängigkeit) ----------
 @Composable
 fun QrCode(text: String, size: androidx.compose.ui.unit.Dp = 160.dp, modifier: Modifier = Modifier) {
+    // MARGIN=0: ZXing zentriert das Symbol sonst mit eigenem, viel zu großem Rand
+    // in die Zielmatrix (260x260) — dadurch blieb ein Drittel der weißen Karte leer.
+    // 0x0 = natürliche Modulgröße, keine Hochskalierung.
     val matrix = remember(text) {
         runCatching {
+            val hints = mapOf(com.google.zxing.EncodeHintType.MARGIN to 0)
             com.google.zxing.qrcode.QRCodeWriter()
-                .encode(text, com.google.zxing.BarcodeFormat.QR_CODE, 260, 260)
+                .encode(text, com.google.zxing.BarcodeFormat.QR_CODE, 0, 0, hints)
         }.getOrNull()
     }
     if (matrix != null) {
-        val n = (matrix.width).coerceAtLeast(1)
-        val c = size.value / n
-        Canvas(
-            modifier = modifier
-                .background(Color.White)
-                .size(size)
-                .padding(size * 0.04f)
-        ) {
+        Canvas(modifier = modifier.background(Color.White).size(size)) {
+            // NUR mit Pixeln rechnen (this.size = gezeichnete Fläche in px).
+            // size.value waere dp und erzeugte auf 2x-Displays die halbe Kantenlaenge.
+            val n = matrix.width.coerceAtLeast(1)
+            val px = this.size.width
+            // Ruhezone exakt 4 Module (QR-Standard) — der Rest ist Symbolflaeche.
+            val quiet = px * 4f / n
+            val c = (px - 2 * quiet) / n
             for (y in 0 until matrix.height) for (x in 0 until matrix.width) {
                 if (matrix.get(x, y)) {
-                    drawRect(Color.Black, androidx.compose.ui.geometry.Offset(x * c, y * c),
+                    drawRect(Color.Black,
+                        androidx.compose.ui.geometry.Offset(quiet + x * c, quiet + y * c),
                         androidx.compose.ui.geometry.Size(c, c))
                 }
             }
@@ -1172,6 +1454,11 @@ fun PairingScreen(vm: MainViewModel) {
     var msg by remember { mutableStateOf<String?>(null) }
     var unlockInput by remember { mutableStateOf("") }
     var unlockBusy by remember { mutableStateOf(false) }
+    // Fokus-Marker fuer die Aktionen: der Button ist selbst gold, ein goldener
+    // Fokusrahmen waere unsichtbar -> invertierter dunkler Ring (Skill-Regel
+    // "inverted ring on accent-colored buttons").
+    var checkBtnFocus by remember { mutableStateOf(false) }
+    var unlockBtnFocus by remember { mutableStateOf(false) }
     val checkFocus = androidx.compose.ui.focus.FocusRequester()
     val unlockFocus = androidx.compose.ui.focus.FocusRequester()
 
@@ -1193,13 +1480,18 @@ fun PairingScreen(vm: MainViewModel) {
     // scrollte das alte Layout die Player-ID/PIN aus dem Bild, wenn der
     // Fokus unten lag — MAC/Passwort waren nicht kontrollierbar.
     // Jetzt liegt alles auf einem Blick, ohne Scrollen.
+    // QR-Größe relativ zum Canvas statt fester dp: auf schmalen Canvassen
+    // (Stick meldet z.B. 640x360 dp) war die Zeile breiter als der Screen.
+    val actCfg = LocalConfiguration.current
+    val qrSize = minOf((actCfg.screenWidthDp * 0.26f).dp, (actCfg.screenHeightDp * 0.44f).dp)
+        .coerceIn(110.dp, 260.dp)
     Row(
-        Modifier.fillMaxSize().padding(horizontal = 36.dp, vertical = 20.dp),
+        Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // ==================== LINKE SPALTE ====================
         Column(
-            Modifier.weight(1f),
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("Smarty Player", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
@@ -1209,14 +1501,15 @@ fun PairingScreen(vm: MainViewModel) {
 
             // Player-ID + Passwort groß und auf einer Zeile (IBPlayer-Prinzip)
             Row(
-                Modifier.background(Color(0xFF10141F), RoundedCornerShape(14.dp)).padding(horizontal = 28.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(32.dp)
+                Modifier.fillMaxWidth(0.94f).background(Color(0xFF10141F), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
             ) {
-                Column(Modifier.width(255.dp)) {
+                Column(Modifier.weight(1.6f)) {
                     Text("Deine Player-ID", color = Color(0xFF8FA3C8), fontSize = 12.sp)
                     Text(playerId, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE8EEFC))
                 }
-                Column(Modifier.width(150.dp)) {
+                Column(Modifier.weight(1f)) {
                     Text("Dein Passwort", color = Color(0xFF8FA3C8), fontSize = 12.sp)
                     Text(pairingPw, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFC94D))
                 }
@@ -1248,7 +1541,7 @@ fun PairingScreen(vm: MainViewModel) {
                     OutlinedTextField(
                         value = unlockInput,
                         onValueChange = { unlockInput = it; vm.unlockError = "" },
-                        modifier = Modifier.width(340.dp).focusRequester(unlockFocus),
+                        modifier = Modifier.fillMaxWidth(0.85f).focusRequester(unlockFocus),
                         singleLine = true,
                         placeholder = { Text("Sicherheits-Passwort", fontSize = 14.sp) },
                         colors = OutlinedTextFieldDefaults.colors(
@@ -1284,8 +1577,19 @@ fun PairingScreen(vm: MainViewModel) {
                             }
                         }
                     },
-                    modifier = Modifier.padding(top = 2.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC94D), contentColor = Color(0xFF0B0E14))) {
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .onFocusChanged { unlockBtnFocus = it.isFocused },
+                    // NICHT gold füllen: auf Gold ist kein Fokus-Marker sichtbar
+                    // (Fire OS 6 malt keinen System-Fokusring). Dunkle Fläche +
+                    // Goldschrift, Fokus = goldener Rahmen + hellere Fläche.
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = if (unlockBtnFocus) 3.dp else 1.dp,
+                        color = if (unlockBtnFocus) Color(0xFFFFC94D) else Color(0xFF3A4666)
+                    ),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (unlockBtnFocus) Color(0xFF1C2438) else Color(0xFF141A2A),
+                        contentColor = Color(0xFFFFC94D))) {
                         Text("Entsperren — Line laden", Modifier.padding(horizontal = 26.dp, vertical = 6.dp), fontSize = 16.sp)
                     }
                 }
@@ -1326,8 +1630,16 @@ fun PairingScreen(vm: MainViewModel) {
                                 }
                             }
                         }
-                    }, modifier = Modifier.focusRequester(checkFocus),
-                       colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFC94D), contentColor = Color(0xFF0B0E14))) {
+                    }, modifier = Modifier
+                       .focusRequester(checkFocus)
+                       .onFocusChanged { checkBtnFocus = it.isFocused },
+                       border = androidx.compose.foundation.BorderStroke(
+                           width = if (checkBtnFocus) 3.dp else 1.dp,
+                           color = if (checkBtnFocus) Color(0xFFFFC94D) else Color(0xFF3A4666)
+                       ),
+                       colors = ButtonDefaults.buttonColors(
+                           containerColor = if (checkBtnFocus) Color(0xFF1C2438) else Color(0xFF141A2A),
+                           contentColor = Color(0xFFFFC94D))) {
                         Text("Prüfen — Playlist laden", Modifier.padding(horizontal = 26.dp, vertical = 6.dp), fontSize = 16.sp)
                     }
                     Spacer(Modifier.height(8.dp))
@@ -1336,15 +1648,17 @@ fun PairingScreen(vm: MainViewModel) {
             }
         }
 
-        Spacer(Modifier.width(36.dp))
+        Spacer(Modifier.width(24.dp))
 
         // ==================== RECHTE SPALTE: QR ====================
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // size= MUSS gesetzt sein: QrCode() ruft intern .size(size) auf und
+            // überschreibt jede width/height des Aufrufers — Default ist 160.dp,
+            // deshalb blieb der QR trotz 240.dp-Wunsch klein.
             QrCode(
                 "https://panel.smartys.tech/pair?mac=$playerId&pw=$pairingPw",
-                modifier = Modifier.width(240.dp).height(240.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White).padding(12.dp)
+                size = qrSize,
+                modifier = Modifier.clip(RoundedCornerShape(12.dp))
             )
             Spacer(Modifier.height(10.dp))
             Text("QR-Code mit dem Handy scannen", color = Color(0xFF8FA3C8), fontSize = 13.sp)

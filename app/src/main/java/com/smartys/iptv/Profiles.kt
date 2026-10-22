@@ -67,6 +67,21 @@ object ProfileStore {
         prefs(ctx).edit().putString(K_PROFILES, arr.toString()).apply()
     }
 
+    // ---------- Profil -> Panel-Line ----------
+
+    /** Welche Line (Provider aus dem Panel) gehoert zu diesem Profil?
+     *  Gespeichert wird Creds.key ("url|user") — ueberlebt Umbenennungen.
+     *  Nicht gesetzt = nicht gebunden (App nutzt alle Lines wie bisher). */
+    fun lineKey(ctx: Context, profileId: String): String? =
+        prefs(ctx).getString("line_$profileId", null)
+
+    fun setLineKey(ctx: Context, profileId: String, key: String?) {
+        val t = key?.trim().orEmpty()
+        prefs(ctx).edit().apply {
+            if (t.isEmpty()) remove("line_$profileId") else putString("line_$profileId", t)
+        }.apply()
+    }
+
     fun list(ctx: Context): List<Profile> {
         val json = prefs(ctx).getString(K_PROFILES, null) ?: return emptyList()
         return runCatching {

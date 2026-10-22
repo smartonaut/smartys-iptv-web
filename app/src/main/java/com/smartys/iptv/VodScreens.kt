@@ -115,12 +115,18 @@ fun MovieGrid(
                     )
                 )
             } else {
+                var searchBoxFocused by remember { mutableStateOf(false) }
                 Surface(
                     onClick = { searchArmed = true },
                     shape = MaterialTheme.shapes.extraLarge,
-                    color = Color(0xFF0B0E14),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF232C42)),
-                    modifier = Modifier.width(300.dp)
+                    // Der Kasten ist das fokussierbare Element — ohne eigenen
+                    // Rahmen sieht man auf Fire OS 6 nicht, dass er gemeint ist.
+                    color = if (searchBoxFocused) Color(0xFF232C42) else Color(0xFF0B0E14),
+                    border = androidx.compose.foundation.BorderStroke(
+                        if (searchBoxFocused) 3.dp else 1.dp,
+                        if (searchBoxFocused) Color(0xFFFFC94D) else Color(0xFF232C42)
+                    ),
+                    modifier = Modifier.width(300.dp).onFocusChanged { searchBoxFocused = it.isFocused }
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 18.dp, vertical = 13.dp)) {
                         Text("🔍", fontSize = 15.sp, color = Color(0xFF6B7A99))
@@ -271,6 +277,12 @@ fun SeriesGrid(
     onOpenSettings: () -> Unit
 ) {
     var searchQuery by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    // Suchfeld erst nach Klick aktiv (wie im Filme-Tab): sonst landet der D-Pad
+    // direkt im Textfeld und öffnet die Tastatur ohne Zutun.
+    var seriesSearchArmed by remember { mutableStateOf(false) }
+    var seriesSearchFocused by remember { mutableStateOf(false) }
+    var seriesSearchBoxFocused by remember { mutableStateOf(false) }
+    val seriesSearchFocus = remember { androidx.compose.ui.focus.FocusRequester() }
 
     val compact = LocalConfiguration.current.screenWidthDp < 1000
     var catMenuRefresh by remember { mutableStateOf(0) }
@@ -311,17 +323,57 @@ fun SeriesGrid(
                 Text("Serien", color = Color(0xFFE8EEFC), fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Text("${shown.size} Serien", color = Color(0xFF6B7A99), fontSize = 12.sp)
             }
-            OutlinedTextField(
-                value = searchQuery, onValueChange = { searchQuery = it },
-                placeholder = { Text("Serie suchen…", color = Color(0xFF6B7A99)) },
-                modifier = Modifier.width(340.dp),
-                singleLine = true,
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = Color(0xFF232C42), focusedBorderColor = Color(0xFFFFC94D))
-            )
+            // Wie bei "Filme": erst ein Klick (OK) auf den Kasten, DANN geht es
+            // ins Eingabefeld. Vorher war das Feld immer fokussierbar -> der
+            // D-Pad landete sofort im Textfeld und öffnete die Tastatur.
+            if (seriesSearchArmed) {
+                OutlinedTextField(
+                    value = searchQuery, onValueChange = { searchQuery = it },
+                    placeholder = { Text("Serie suchen…", color = Color(0xFF6B7A99)) },
+                    modifier = Modifier.width(340.dp)
+                        .focusRequester(seriesSearchFocus)
+                        .onFocusChanged { seriesSearchFocused = it.isFocused },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.extraLarge,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = Color(0xFF232C42),
+                        focusedBorderColor = Color(0xFFFFC94D)
+                    )
+                )
+            } else {
+                Surface(
+                    onClick = { seriesSearchArmed = true },
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = if (seriesSearchBoxFocused) Color(0xFF232C42) else Color(0xFF0B0E14),
+                    border = androidx.compose.foundation.BorderStroke(
+                        if (seriesSearchBoxFocused) 3.dp else 1.dp,
+                        if (seriesSearchBoxFocused) Color(0xFFFFC94D) else Color(0xFF232C42)
+                    ),
+                    modifier = Modifier.width(300.dp).onFocusChanged { seriesSearchBoxFocused = it.isFocused }
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 18.dp, vertical = 13.dp)) {
+                        Text("🔍", fontSize = 15.sp, color = Color(0xFF6B7A99))
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            searchQuery.ifBlank { "Serie suchen…" },
+                            color = if (searchQuery.isBlank()) Color(0xFF6B7A99) else Color(0xFFE8EEFC),
+                            fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.width(14.dp))
             TextButton(onClick = onBack) { Text("←", fontSize = 22.sp, color = Color(0xFF8FA3C8)) }
             TextButton(onClick = onOpenSettings) { Text("⚙", fontSize = 22.sp, color = Color(0xFF8FA3C8)) }
+        }
+        LaunchedEffect(seriesSearchArmed) {
+            if (seriesSearchArmed) { kotlinx.coroutines.delay(100); runCatching { seriesSearchFocus.requestFocus() } }
+        }
+        LaunchedEffect(seriesSearchFocused) {
+            if (!seriesSearchFocused && seriesSearchArmed) {
+                kotlinx.coroutines.delay(200)
+                if (!seriesSearchFocused) seriesSearchArmed = false
+            }
         }
         Row(Modifier.fillMaxSize()) {
             var catMenuFor by remember { mutableStateOf<Category?>(null) }
