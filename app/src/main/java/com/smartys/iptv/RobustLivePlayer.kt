@@ -25,7 +25,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
  * (~35 Mbit/s) frisst auf einem 2-GB-Gerät den gesamten CMA-/Heap-Speicher
  * und lässt den Hardware-Decoder mit "Source error" aussteigen.
  */
-class RobustLivePlayer(ctx: Context) {
+class RobustLivePlayer(private val ctx: Context) {
 
     /** Puffergrößen (in ms) dynamisch an die Hardware anpassen.
      *  Schwache Geräte (wenig RAM / wenig CMA) bekommen kleine Puffer, damit der
@@ -81,7 +81,15 @@ class RobustLivePlayer(ctx: Context) {
      */
     private val requestedBufferSec: Int = PlayPrefs.bufferSec(ctx)
     private val deviceMaxBufferMs: Int = DeviceCap.maxBufferSec(ctx) * 1000
-    private val minBufferMs: Int = minOf(bufferDurations[0], deviceMaxBufferMs)
+    /**
+     * Start-Puffer. Mit Nutzer-Einstellung wird auch das Minimum auf die
+     * gewuenschte Zeit gesetzt — sonst haette ein Reglerwert unter dem
+     * Auto-Minimum (10 s) keine Wirkung: 5 s eingestellt, aber 10 s gepuffert.
+     */
+    private val minBufferMs: Int = run {
+        val base = minOf(bufferDurations[0], deviceMaxBufferMs)
+        if (requestedBufferSec > 0) minOf(base, requestedBufferSec * 1000) else base
+    }
     private val maxBufferMs: Int = run {
         val requestedMs = if (requestedBufferSec > 0) requestedBufferSec * 1000 else bufferDurations[1]
         val capped = minOf(maxOf(requestedMs, minBufferMs), deviceMaxBufferMs)
@@ -238,10 +246,46 @@ class RobustLivePlayer(ctx: Context) {
         player.stop()
     }
 
-    fun release() {
+    /** true, wenn der Player freigegeben wurde — Aufrufer muss neu bauen. */
+    @Volatile
+    var released = false
+        private set
+
+    /**
+     * Gibt den KOMPLETTEN Puffer frei (RAM + Allocator-Segmente).
+     *
+     * Der Live-Puffer ist der groesste Speicherblock der App. Ohne diesen
+     * Aufruf bleibt er nach dem Verlassen des Players belegt, weil das
+     * RobustLivePlayer-Objekt app-weit lebt — andere Apps (Netflix, YouTube)
+     * finden dann auf einer 1,8-GB-Box keinen Platz mehr. `stop()` allein
+     * gibt die Segmente nur an den Allocator zurueck, nicht ans System.
+     */
+    fun shutdown() {
+        if (released) return
+        val freiVorher = freiMb()
+        try {
+            player.stop()
+            player.clearMediaItems()
+            player.release()
+        } catch (e: Exception) {
+            Log.w("SmartysIPTV", "shutdown: ${e.message}")
+        }
+        released = true
         currentUrl = null
-        player.release()
+        currentChannelId = null
+        // Allocator-Pool und native Puffer ans System zurueckgeben
+        Runtime.getRuntime().gc()
+        Log.i("SmartysIPTV", "Player beendet, Puffer frei: ${freiVorher} MB -> ${freiMb()} MB")
     }
+
+    private fun freiMb(): Long = try {
+        val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val mi = android.app.ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mi)
+        mi.availMem / 1048576L
+    } catch (_: Exception) { 0L }
+
+    fun release() = shutdown()
 }
 
 /** Timeshift-Einstellung (Live-TV-Pause + Zurueckspulen). App-weit, nicht pro Profil. */

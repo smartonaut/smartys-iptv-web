@@ -106,7 +106,6 @@ fun EpgGrid(
                             .background(if (focused) Color(0xFF1A2238) else Color(0xFF11172A))
                             .clickable { onPlay(ch) }
                             .onFocusChanged { focused = it.isFocused }
-                            .focusable()
                             .padding(horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

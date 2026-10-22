@@ -28,18 +28,20 @@ android {
         create("tv") {
             dimension = "target"
             applicationId = "com.smartys.iptv"
-            versionCode = 29
-            versionName = "0.8.9"
+            versionCode = 50
+            versionName = "0.8.31"
             buildConfigField("boolean", "USE_KEYSTORE_STORE", "false")
+            buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "true")
         }
         // Handy (Android 16): eigene App-ID, Keystore-Speicher (Crash-Fix).
         create("phone") {
             dimension = "target"
             applicationId = "com.smartys.iptv.mobile"
             minSdk = 23
-            versionCode = 28
-            versionName = "0.8.8"
+            versionCode = 29
+            versionName = "0.8.9"
             buildConfigField("boolean", "USE_KEYSTORE_STORE", "true")
+            buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "false")
         }
     }
 

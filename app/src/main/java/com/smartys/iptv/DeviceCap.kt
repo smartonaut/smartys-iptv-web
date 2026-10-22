@@ -39,9 +39,12 @@ object DeviceCap {
         val ram = totalRamMb()
         val cma = cmaTotalMb()
         val free = freeStorageMb(ctx)
+        // MemTotal liegt rund 5 % unter der Kataloggroesse (Kernel-Reservierung):
+        // ein 2-GB-Cube meldet 1989 MB, ein 1,8-GB-Stick 1793 MB. Mit den
+        // Katalogschwellen (2048) fiele der Cube faelschlich in die 20-s-Klasse.
         var max = when {
-            ram >= 4096 -> 60
-            ram >= 2048 -> 40
+            ram >= 3800 -> 60
+            ram >= 1800 -> 40
             else -> 20
         }
         if (cma in 1..255) max = minOf(max, 25)

@@ -124,6 +124,11 @@ object CredStore {
     }
 
     data class Creds(val url: String, val user: String, val pass: String) {
+        /**
+         * Stabiler Schluessel fuer die Profil-Bindung: URL + User. Ueberlebt
+         * Umbenennungen der Line im Panel (anders als der Listen-Index).
+         */
+        val key: String get() = "$url|$user"
         fun streamUrl(streamId: String, ext: String = "m3u8"): String =
             "$url/live/$user/$pass/$streamId.$ext"
 

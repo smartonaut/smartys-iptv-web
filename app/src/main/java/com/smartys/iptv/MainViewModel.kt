@@ -287,14 +287,72 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             state = AppState.NeedsLogin
             return
         }
-        creds = providers.first()
         allProviders = providers
         apis = providers.map { buildApi(it) }
-        api = apis.firstOrNull()
+        // Profil-Bindung: die zugeordnete Line ist die primaere.
+        val bound = boundProviderIndex() ?: 0
+        creds = providers.getOrNull(bound) ?: providers.first()
+        api = apis.getOrNull(bound) ?: apis.firstOrNull()
         loadContent()
         favorites = getPrefs().getStringSet("favorites", emptySet()) ?: emptySet()
         lastWatched = getPrefs().getString("last_watched", null)
         loadRecent()
+    }
+
+    /** Pairing-/Unlock-Screen anzeigen (z. B. wenn neu geladene Lines
+     *  verschluesselt sind und das Sicherheits-Passwort fehlt). */
+    fun requestPairingScreen() {
+        state = AppState.NeedsLogin
+    }
+
+    // ---------- Profil -> Panel-Line ----------
+
+    /** Index der Line, die am aktiven Profil haengt (null = nicht gebunden). */
+    fun boundProviderIndex(): Int? {
+        val pid = ProfileStore.activeId(getApplication()) ?: return null
+        val key = ProfileStore.lineKey(getApplication(), pid) ?: return null
+        val idx = allProviders.indexOfFirst { it.key == key }
+        return if (idx >= 0) idx else null
+    }
+
+    /** Anzeigename einer Line fuer die Auswahl. */
+    private fun lineLabel(c: CredStore.Creds, idx: Int): String {
+        val host = c.url.removePrefix("http://").removePrefix("https://").trimEnd('/')
+        return if (c.user.isBlank()) "Line ${idx + 1} · $host"
+        else "Line ${idx + 1} · $host (${c.user})"
+    }
+
+    /** Alle Lines fuer die Auswahl in den Einstellungen. */
+    fun lines(): List<Pair<Int, String>> = allProviders.mapIndexed { i, c -> i to lineLabel(c, i) }
+
+    /** Name der Line, die an einem Profil haengt (null = "Automatisch"). */
+    fun lineLabelFor(profileId: String): String? {
+        val key = ProfileStore.lineKey(getApplication(), profileId) ?: return null
+        val idx = allProviders.indexOfFirst { it.key == key }
+        if (idx < 0) return null
+        return lineLabel(allProviders[idx], idx)
+    }
+
+    /** Profil an eine Line binden (index = null -> "Automatisch"). */
+    fun setProfileLine(profileId: String, index: Int?) {
+        ProfileStore.setLineKey(
+            getApplication(), profileId,
+            index?.let { allProviders.getOrNull(it)?.key }
+        )
+        if (profileId == ProfileStore.activeId(getApplication())) applyActiveLine()
+    }
+
+    /** Aktive Line aus der Profil-Bindung setzen und Inhalte neu laden. */
+    fun applyActiveLine() {
+        val idx = boundProviderIndex() ?: 0
+        val p = allProviders.getOrNull(idx) ?: return
+        val changed = creds?.key != p.key
+        creds = p
+        api = apis.getOrNull(idx) ?: apis.firstOrNull()
+        loadContent()
+        loadVod()
+        loadSeries()
+        android.util.Log.i("SmartysIPTV", "Profil-Line aktiv: $idx (${lineLabel(p, idx)}) gewechselt=$changed")
     }
 
     private fun buildApi(c: CredStore.Creds): XtreamApi {
@@ -318,7 +376,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (providers.isEmpty()) return@launch
                 val all = mutableListOf<LiveStream>()
                 val allCats = mutableListOf<Category>()
+                // Ist das Profil an eine Line gebunden, nur diese laden.
+                val boundIdx = boundProviderIndex()
                 providers.forEachIndexed { idx, c ->
+                    if (boundIdx != null && idx != boundIdx) return@forEachIndexed
                     val a = apis.getOrNull(idx) ?: return@forEachIndexed
                     val cats = withTimeout(30000) { a.liveCategories(c.user, c.pass) }
                     val streams = withTimeout(60000) { a.liveStreams(c.user, c.pass) }
@@ -486,6 +547,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (url.isNotBlank() && user.isNotBlank()) CredStore.Creds(url, user, pass) else null
             }
         } catch (e: Exception) {
+            android.util.Log.w("SmartysIPTV", "unlockLine: Entschluesselung fehlgeschlagen", e)
             emptyList()
         }
         if (provs.isEmpty()) {
