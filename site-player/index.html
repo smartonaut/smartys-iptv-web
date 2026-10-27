@@ -30,7 +30,10 @@
     {
       "@type": "WebSite",
       "name": "Smartys Player",
-      "alternateName": ["Smartys IPTV Player", "Smarty Player"],
+      "alternateName": [
+        "Smartys IPTV Player",
+        "Smarty Player"
+      ],
       "url": "https://player.smartys.tech/",
       "inLanguage": "de-DE"
     },
@@ -46,7 +49,11 @@
       "operatingSystem": "Android",
       "applicationCategory": "MultimediaApplication",
       "softwareVersion": "0.8.31",
-      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR"
+      },
       "description": "Der schlanke IPTV-Player für Fire TV und Android: eigene M3U-Playlists, EPG, 4K, VOD Filme & Serien, Multi-Playlist und Kindersicherung."
     },
     {
@@ -55,8 +62,25 @@
       "operatingSystem": "OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision, PurE2",
       "applicationCategory": "MultimediaApplication",
       "softwareVersion": "0.1.0",
-      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR"
+      },
       "description": "IPTV-Plugin für Enigma2-Receiver (VU+, Dreambox, GigaBlue): Live-TV, Filme, Serien mit EPG-Infobar, Aufnahme und Timeshift. Läuft auf OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision und PurE2."
+    },
+    {
+      "@type": "SoftwareApplication",
+      "name": "Smartys IPTV Player für LG webOS",
+      "operatingSystem": "webOS (LG Smart TV)",
+      "applicationCategory": "MultimediaApplication",
+      "softwareVersion": "1.2.0",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR"
+      },
+      "description": "Native IPTV-App für LG Smart TVs: Live-TV mit Stillstands-Wächter, Programmraster über sechs Stunden, Filme und Serien mit Staffel-Wiedergabe, einstellbarer Puffer, verschlüsselte Zugangsdaten. Installation als .ipk per Developer Mode."
     }
   ]
 }
@@ -99,7 +123,15 @@
   .hero h1 { font-size:clamp(40px,6vw,72px); font-weight:900; letter-spacing:-2.5px; line-height:1.02; max-width:820px; }
   .hero h1 .grad { background:linear-gradient(90deg,var(--gold),var(--pink),var(--violet)); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .hero p.sub { font-size:20px; color:var(--muted); max-width:600px; margin:26px 0 36px; }
-  .cta-row { display:flex; gap:14px; flex-wrap:wrap; }
+  .cta-row { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  /* Build-Nummer: muss auf einen Blick erkennbar sein, damit man ohne
+     Nachfragen sieht, ob die angebotene IPA neuer ist als die installierte. */
+  .build-badge { display:inline-flex; align-items:center; gap:7px; padding:9px 14px;
+    border-radius:12px; font-size:13.5px; font-weight:700; letter-spacing:.2px;
+    color:var(--gold); background:rgba(255,201,77,.10);
+    border:1px solid rgba(255,201,77,.38); white-space:nowrap; }
+  .build-badge .build-sep { color:var(--dim); font-weight:400; }
+  .build-badge .build-date { color:var(--muted); font-weight:500; }
   .stats { display:flex; gap:40px; margin-top:60px; flex-wrap:wrap; }
   .stat b { font-size:32px; font-weight:800; display:block; letter-spacing:-1px; }
   .stat span { font-size:13px; color:var(--dim); }
@@ -168,13 +200,13 @@
 
 <header class="hero"><div class="wrap">
   <div class="pill"><span class="live" aria-hidden="true"></span> Version 0.8.31 — Beta-Download verfügbar</div>
-  <h1>Smartys Player — <span class="grad">dein Player, deine Lines.</span></h1>
+  <h1>Smartys Player — <span class="grad">unser Player, deine Lines.</span></h1>
   <p class="sub">Smartys Player ist der schlanke M3U-Player für Fire TV und Android. Sofortiges EPG, 4K, Auto-Reconnect — und deine Playlists verwaltest du selbst im Panel.</p>
   <div class="cta-row">
     <a class="btn gold" href="/m3u.html">M3U Creator (Demo-Sender)</a>
     <a class="btn ghost" href="https://panel.smartys.tech">Zum Panel</a>
   </div>
-  <p style="font-size:13px;color:var(--dim);margin-top:14px;">Android-App als Beta. Enigma2 (VU+/Dreambox) als Alpha. WebOS (LG) und Samsung Tizen sind im Test.</p>
+  <p style="font-size:13px;color:var(--dim);margin-top:14px;">Android-App als Beta. Enigma2 (VU+/Dreambox) als Alpha. LG webOS als Beta (v1.2.0). Samsung Tizen folgt.</p>
   <div class="stats">
     <div class="stat"><b>4K</b><span>Streaming</span></div>
     <div class="stat"><b>0 €</b><span>Einstieg</span></div>
@@ -237,6 +269,7 @@
   </div>
   <div class="cta-row" style="margin-top:32px;">
     <a class="btn gold" href="/download/enigma2">Enigma2-Download (IPK)</a>
+    <span class="build-badge">v0.4.0</span>
   </div>
   <p style="font-size:13px;color:var(--dim);margin-top:14px;">Kompatibel mit OpenATV, OpenPLi, OpenViX, BlackHole, VTi, OpenVision, PurE2, OpenHDF, OpenSPA und weiteren Enigma2-Images. Alpha-Version — installieren per <code>opkg install</code>.</p>
 </div></section>
@@ -250,9 +283,9 @@
     <div class="card"><span class="ico" aria-hidden="true">🪟</span><h3>Windows</h3><p>Für Windows 10/11. Installer doppelklicken, fertig — kein Java, kein libmpv nötig.</p></div>
   </div>
   <div class="cta-row" style="margin-top:32px;">
-    <a class="btn gold" href="/download/player_msi">Windows (.msi)</a>
-    <a class="btn ghost" href="/download/player_deb">Ubuntu / Debian (.deb)</a>
-    <a class="btn ghost" href="/download/player_rpm">SUSE / RedHat (.rpm)</a>
+    <a class="btn gold" href="/download/player_msi">Windows (.msi) · v1.5.41</a>
+    <a class="btn ghost" href="/download/player_deb">Ubuntu / Debian (.deb) · v1.5.40</a>
+    <a class="btn ghost" href="/download/player_rpm">SUSE / RedHat (.rpm) · v1.5.40</a>
   </div>
   <p style="font-size:13px;color:var(--dim);margin-top:14px;">Desktop-Beta · 1.5.40 · Filme/Serien blenden ausgeblendete Gruppen aus, Live-TV-Gruppen in Multi-Line nur einmal, OSD-Fixes (Logo, Schrift, Crash beim Verlassen), Aufnahme &amp; Timeshift, Multi-View, EPG, universelle Suche, Weiterschauen, Film-Downloads, QR-Login und Demo-Modus. Windows-Installer unsigniert — beim ersten Start „Unbekannter Hersteller" bestätigen.</p>
 
@@ -267,6 +300,44 @@
       <li><strong style="color:var(--text);">1.5.25</strong> — OSD-Karte selbstgezeichnet: Logo, Titel, EPG-Zeile, echter Fortschrittsbalken, „Danach"-Zeile.</li>
       <li><strong style="color:var(--text);">1.5.24</strong> — Profil→Panel-Line-Bindung (Labels aus dem Panel, Auswahl in den Einstellungen).</li>
     </ul>
+  </details>
+</div></section>
+
+<section class="alt" id="ios-alpha"><div class="wrap">
+  <h2>iOS-App für iPhone &amp; iPad.</h2>
+  <p class="lead">Alpha-Testversion — Live-TV, Filme, Serien und Offline-Downloads. Filme laufen über VLCKit, also auch MKV mit AC3-Ton; Live-TV über den System-Player mit Picture-in-Picture und AirPlay. Getestet auf iPad Air und iPhone 16 Pro Max.</p>
+  <div class="grid">
+    <div class="card"><span class="ico" aria-hidden="true">🎬</span><h3>Wiedergabe</h3><p>MKV, TS, AVI und AC3/E-AC3 — Formate, die der System-Player nicht kann. Tonspur- und Untertitelwahl inklusive.</p></div>
+    <div class="card"><span class="ico" aria-hidden="true">⬇️</span><h3>Offline</h3><p>Filme, einzelne Folgen und ganze Staffeln aufs Gerät. Speicheranzeige warnt, bevor das iPad voll läuft.</p></div>
+    <div class="card"><span class="ico" aria-hidden="true">⏭️</span><h3>Abspann-Sprung</h3><p>Erkennt den Abspann und bietet die nächste Folge an — statt fünf Minuten Credits zu schauen.</p></div>
+  </div>
+  <div class="cta-row" style="margin-top:32px;">
+    <a class="btn gold" href="/ipa/SmartysPlayer-alpha.ipa">iOS-App laden (IPA, 48 MB)</a>
+    <span class="build-badge" title="Build-Nummer der bereitgestellten IPA">Build&nbsp;45<span class="build-sep">·</span><span class="build-date">24.10.2026</span></span>
+    <a class="btn ghost" href="https://forum.smartys.tech/d/12">Anleitung &amp; Versionslog</a>
+  </div>
+  <details style="margin-top:18px;">
+    <summary style="cursor:pointer;color:var(--text);">Installation ohne Mac — in 7 Schritten</summary>
+    <ol style="font-size:14px;line-height:1.7;color:var(--dim);margin-top:12px;">
+      <li><strong>iLoader</strong> auf den Rechner holen: <a href="https://github.com/nab138/iloader/releases/latest">github.com/nab138/iloader/releases</a></li>
+      <li><strong>IPA</strong> oben herunterladen.</li>
+      <li>iPhone/iPad per USB anschließen, entsperren, „Diesem Computer vertrauen" tippen.</li>
+      <li>In iLoader mit der kostenlosen Apple-ID anmelden, Gerät wählen, IPA importieren und installieren.</li>
+      <li><strong>App einmal antippen.</strong> Es erscheint die Meldung „Entwicklermodus erforderlich" — das ist richtig so. Erst dadurch schaltet iOS den Menüpunkt frei.</li>
+      <li><strong>Entwicklermodus einschalten:</strong> Einstellungen → Datenschutz &amp; Sicherheit → ganz nach unten scrollen → Entwicklermodus → Schalter auf AN → „Neu starten" bestätigen.</li>
+      <li><strong>Freigeben:</strong> Einstellungen → Allgemein → VPN &amp; Geräteverwaltung → Entwickler-App → deine Apple-ID → „Vertrauen".</li>
+    </ol>
+    <div style="margin-top:16px;padding:14px 16px;border-radius:12px;background:rgba(255,201,77,.07);border:1px solid rgba(255,201,77,.28);font-size:13.5px;line-height:1.65;color:var(--dim);">
+      <strong style="color:var(--gold);">Der Entwicklermodus fehlt in den Einstellungen?</strong><br>
+      Das ist auf einem frischen iPhone oder iPad normal — Apple blendet die Zeile aus, solange das Gerät nie mit Xcode verbunden war und keine Entwickler-App darauf liegt. Sie erscheint erst, nachdem die App aus Schritt 4 installiert wurde.<br><br>
+      <strong style="color:var(--text);">Wenn sie auch nach Schritt 5 nicht auftaucht:</strong><br>
+      1. App-Symbol noch einmal antippen, Meldung wegtippen, Gerät neu starten.<br>
+      2. Einstellungen → Allgemein → VPN &amp; Geräteverwaltung prüfen — steht dort schon ein Eintrag „Entwickler-App" mit deiner Apple-ID, zuerst dort <em>Vertrauen</em> antippen, dann nochmal unter Datenschutz &amp; Sicherheit nachsehen.<br>
+      3. Ältere iOS-Version (vor 16): Der Entwicklermodus heißt dort nicht so und ist nach der Installation bereits aktiv — dann direkt bei Schritt 7 weitermachen.<br><br>
+      <strong style="color:var(--text);">Wichtig:</strong> Nach dem Einschalten startet das Gerät neu. Die installierte App bleibt erhalten, muss aber nach dem Neustart noch einmal geöffnet werden — erst dann gilt die Freigabe aus Schritt 7 dauerhaft. Die kostenlose Apple-ID signiert nur 7 Tage; danach dieselbe IPA erneut installieren.<br><br>
+      <strong style="color:var(--text);">Alternative ohne Entwicklermodus:</strong> <a href="https://altstore.io">AltStore</a> oder <a href="https://sideloadly.io">Sideloadly</a> setzen die Freigabe teilweise selbst — der Entwicklermodus kann dann entfallen, die 7-Tage-Frist bleibt aber in jedem Fall bestehen.
+    </div>
+    <p style="font-size:13px;color:var(--dim);margin-top:10px;">Die kostenlose Apple-ID signiert 7 Tage. Danach dieselbe IPA erneut durch iLoader schicken — Einstellungen, Favoriten und Downloads bleiben erhalten. Die installierte Build-Nummer steht in der App unter <em>Konto</em>.</p>
   </details>
 </div></section>
 
@@ -288,12 +359,12 @@
   <p class="lead">Smartys M3U Player kommt auch auf deinen Fernseher: als native Smart TV App für LG &amp; Samsung — und als Android-App für Amazon Fire TV und Android-TV-Boxen (z.&nbsp;B. Cube).</p>
   <div class="grid">
     <div class="card"><span class="ico" aria-hidden="true">📡</span><h3>Fire TV &amp; Cube (Android TV)</h3><p>Android-App für Amazon Fire TV und Android-TV-Boxen (z.&nbsp;B. Cube) — mit v0.8.9 getestet (Bildschirmschoner-Fix + einstellbare Cache-Dauer mit RAM/Speicher-Check).</p></div>
-    <div class="card"><span class="ico" aria-hidden="true">📡</span><h3>LG (webOS)</h3><p>Komplete native App fürs LG TV — Live-TV, VOD, EPG, Suche. Installation als .ipk per Dev-Mode (Anleitung im Forum). Status: Beta — im Testfeld.</p></div>
+    <div class="card"><span class="ico" aria-hidden="true">📡</span><h3>LG (webOS) — v1.2.0</h3><p>Native App fürs LG TV: Live-TV, VOD, EPG-Raster über 6 Stunden, Suche. Neu in 1.2.0: <b>Stillstands-Wächter</b> (verbindet nach 3 s eingefrorenem Bild selbst neu), <b>Puffer einstellbar</b> gegen Ruckeln, <b>Staffel abspielen</b> mit Abspann-Hinweis und <b>Mehrzeilen-Modus</b>. Installation als .ipk per Dev-Mode.</p></div>
     <div class="card"><span class="ico" aria-hidden="true">📡</span><h3>Samsung (Tizen)</h3><p>Native App für Samsung Smart TVs — identische Funktionsweise, folgt als .ipk.</p></div>
   </div>
   <div class="cta-row" style="margin-top:32px;">
     <a class="btn gold" href="/download/player">Smartys M3U Player v0.8.31 (Fire TV &amp; Cube, APK)</a>
-    <a class="btn gold" href="https://github.com/smartonaut/smartys-iptv-webos/releases/download/v1.1.2/com.smartys.iptv_1.1.2_all.ipk">Smartys M3U Player v1.1.2 (LG webOS, IPK)</a>
+    <a class="btn gold" href="https://github.com/smartonaut/smartys-iptv-webos/releases/download/v1.2.0/com.smartys.iptv_1.2.0_all.ipk">Smartys M3U Player v1.2.0 (LG webOS, IPK)</a>
     <span class="btn ghost" style="opacity:.65;cursor:default;">Samsung Tizen — folgt</span>
   </div>
   <p style="font-size:13px;color:var(--dim);margin-top:14px;">Alle Downloads tragen die Versionsnummer im Dateinamen. LG-Installation (Dev-Mode + .ipk) erklärt Schritt für Schritt im <a href="https://forum.smartys.tech/t/smartys-iptv-webos" style="color:var(--gold);">Forum → Smartys IPTV webOS</a>.</p>
@@ -304,6 +375,7 @@
   <div>
     <a href="https://panel.smartys.tech">Panel</a>
     <a href="https://smartys.tech" style="margin-left:18px;">smartys.tech</a>
+    <a href="/blog/" style="margin-left:18px;">Neuigkeiten</a>
     <a href="/m3u.html" style="margin-left:18px;">M3U Creator</a>
     <a href="/impressum.html" style="margin-left:18px;">Impressum</a>
     <a href="/datenschutz.html" style="margin-left:18px;">Datenschutz</a>
