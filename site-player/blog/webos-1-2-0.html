@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Smartys Player 1.2.0 für LG webOS: Stillstands-Wächter, einstellbarer Puffer, Programmraster und Staffel-Wiedergabe — und ein Fehler, der seit 1.1.0 jede Serie unerreichbar machte.">
+<title>Smartys Player 1.2.0 für LG webOS — Stillstands-Wächter und ein Fehler, der jede Serie blockierte</title>
+<link rel="canonical" href="https://player.smartys.tech/blog/webos-1-2-0.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Smartys Player 1.2.0 für LG webOS">
+<meta property="og:description" content="Stillstands-Wächter, einstellbarer Puffer, Programmraster, Staffel-Wiedergabe — und ein Fehler, der seit 1.1.0 jede Serie unerreichbar machte.">
+<meta property="og:url" content="https://player.smartys.tech/blog/webos-1-2-0.html">
+<meta property="og:image" content="https://player.smartys.tech/logo.png">
+<meta name="theme-color" content="#070a12">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link href="/fonts/inter.css" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#070a12; --panel:rgba(255,255,255,.04); --border:rgba(255,255,255,.08);
+    --text:#f2f5ff; --muted:#9aa7c4; --dim:#6b7896;
+    --gold:#ffc94d; --violet:#8b5cf6; --cyan:#22d3ee; --pink:#f472b6;
+  }
+  body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.7; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:760px; margin:0 auto; padding:0 24px; }
+  nav { position:sticky; top:0; z-index:20; background:rgba(7,10,18,.7); backdrop-filter:blur(20px) saturate(180%); border-bottom:1px solid var(--border); }
+  nav .wrap { max-width:1140px; display:flex; justify-content:space-between; align-items:center; padding:16px 24px; }
+  .logo { font-size:19px; font-weight:800; letter-spacing:-.3px; }
+  .logo .dot { color:var(--gold); }
+  .logo a { color:var(--dim); font-size:13px; text-decoration:none; margin-left:14px; font-weight:500; }
+  .btn { display:inline-block; padding:11px 22px; border-radius:12px; font-weight:600; font-size:14.5px; text-decoration:none; }
+  .btn.gold { background:linear-gradient(135deg,var(--gold),#ffb347); color:#1a1200; }
+  .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  article { padding:64px 0 90px; }
+  .kicker { font-size:13px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); }
+  h1 { font-size:clamp(30px,4.4vw,46px); font-weight:900; letter-spacing:-1.3px; line-height:1.12; margin:14px 0 18px; }
+  .meta { color:var(--dim); font-size:14px; margin-bottom:40px; }
+  h2 { font-size:clamp(22px,3vw,30px); font-weight:800; letter-spacing:-.6px; margin:48px 0 14px; }
+  h3 { font-size:19px; font-weight:700; margin:28px 0 8px; }
+  p { color:var(--muted); margin-bottom:16px; }
+  strong { color:var(--text); }
+  ul { margin:0 0 18px 22px; color:var(--muted); }
+  li { margin-bottom:8px; }
+  code { background:rgba(255,255,255,.07); border:1px solid var(--border); border-radius:6px; padding:2px 6px; font-size:13.5px; color:var(--gold); }
+  pre { background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:14px; padding:18px 20px; overflow-x:auto; margin:18px 0; }
+  pre code { background:none; border:none; padding:0; color:var(--text); font-size:13px; line-height:1.6; }
+  .note { background:rgba(255,201,77,.07); border:1px solid rgba(255,201,77,.3); border-radius:14px; padding:18px 22px; margin:24px 0; }
+  .note p { margin:0; color:var(--text); }
+  .cta-row { display:flex; gap:14px; flex-wrap:wrap; margin:36px 0 12px; }
+  footer { border-top:1px solid var(--border); padding:36px 0; color:var(--dim); font-size:13.5px; }
+  footer a { color:var(--dim); text-decoration:none; margin-right:18px; }
+  footer a:hover { color:var(--gold); }
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo">Smartys<span class="dot">.</span>Player<a href="/">← zur Startseite</a></div>
+  <div class="links"><a class="btn ghost" href="/blog/">Alle Beiträge</a></div>
+</div></nav>
+
+<article><div class="wrap">
+  <div class="kicker">Release · 27. Oktober 2026</div>
+  <h1>webOS 1.2.0: der Fernseher ist kein Handy</h1>
+  <div class="meta">Smartys Player für LG Smart TVs · Version 1.2.0 · Lesezeit 4 Minuten</div>
+
+  <p>Die webOS-App hing sechs Wochen zurück. Sie stand auf dem Stand von Android 0.8.6,
+  während Desktop längst bei 2.0.0 und Android bei 0.8.31 war. Jetzt ist sie nachgezogen —
+  aber nicht indem ich Kotlin nach JavaScript übersetzt habe. Ein Fernseher hat eigene
+  Regeln, und die bestimmen, welche Features überhaupt Sinn ergeben.</p>
+
+  <h2>Das wichtigste Feature auf einem Fernseher: merken, dass nichts mehr läuft</h2>
+  <p>Wenn ein Livestream hängt, kommt <strong>kein Fehler</strong>. Der Decoder steht einfach,
+  das Bild friert ein, und die App denkt weiter, alles sei in Ordnung. Der Nutzer sitzt
+  vor einem Standbild und weiß nicht, ob der Sender gerade eine Pause macht oder ob
+  etwas kaputt ist. Erst der Senderwechsel hilft.</p>
+  <p>Der Stillstands-Wächter prüft deshalb im Sekundentakt, ob die Wiedergabeposition
+  weiterläuft. Bleibt sie stehen, wird nach drei Sekunden neu verbunden. Drei Feinheiten
+  stecken darin:</p>
+  <ul>
+    <li><strong>15 Sekunden Anlaufphase</strong> — am Anfang steht die Position kurz still,
+        weil sich der Puffer füllt. Wer sofort neu verbindet, erzeugt eine Endlosschleife.</li>
+    <li><strong>Nie bei Filmen</strong> — bei VOD ist Stillstand normal (Pause, Spulen).</li>
+    <li><strong>Nie bei pausierter Wiedergabe</strong> — sonst reißt der Wächter dem Nutzer
+        die Pause weg.</li>
+  </ul>
+
+  <h2>Puffer: der Unterschied zwischen „läuft" und „ruckelt"</h2>
+  <p>Auf dem Handy ist ein großer Puffer egal, auf dem Fernseher ist er der ganze
+  Unterschied. Die Pufferdauer lässt sich jetzt durchschalten — Automatik oder 3, 5, 8,
+  12, 20, 30 Sekunden — und wirkt direkt auf die Pufferstrategie des Players. Bewusst
+  als <strong>Durchschalt-Knopf</strong> und nicht als Auswahlfeld: ein Aufklapp-Menü ist
+  mit der Fernbedienung eine Sackgasse.</p>
+
+  <h2>Programmraster statt Programmliste</h2>
+  <p>Vorher zeigte die Übersicht 24 Stunden am Stück — auf einem Fernseher unbrauchbar,
+  weil man seitlich scrollt wie in einer Tabellenkalkulation. Jetzt sind es sechs
+  Stunden ab jetzt, die laufende Sendung ist hervorgehoben, und ein Klick auf eine
+  Sendung startet den Sender. Der Bildlauf springt auf die aktuelle Stunde.</p>
+
+  <h2>Staffel statt Download</h2>
+  <p>Der Desktop lädt ganze Staffeln herunter. Ein Fernseher hat keinen beschreibbaren
+  Speicher für so etwas, also wird gespielt statt geladen: eine Folgeschlange je Staffel,
+  die bereits zu Ende gesehene Folgen überspringt, und fünf Sekunden vor dem Abspann ein
+  Hinweis auf die nächste Folge. Die Zurück-Taste bricht ab.</p>
+
+  <h2>Ein Fehler, der seit 1.1.0 jede Serie blockierte</h2>
+  <p>Beim Testen ist mir etwas aufgefallen, das nicht neu war: Die Serien-Detailansicht
+  ließ sich <strong>nie</strong> öffnen. Wer auf eine Serie klickte, bekam nichts — keinen
+  Fehler, keine Meldung, einfach keine Reaktion.</p>
+  <p>Die Ursache ist eine Zeile, die in einer Ein-Datei-App besonders gemein ist. Der
+  Parameter der Funktion hieß genauso wie eine globale Funktion:</p>
+  <pre><code>function openSeriesDetail(show) {
+    show("view-series-detail");   // TypeError: show is not a function
+    …
+}</code></pre>
+  <p>Der Parameter <code>show</code> überdeckt die globale Funktion <code>show()</code>, die
+  die Ansicht wechselt. Der Aufruf wirft einen Typfehler, die Ansicht bleibt aus. Ein
+  Syntaxprüfer findet das nie — die Syntax ist gültig. Aufgefallen ist es erst, als ich
+  die App im Browser durchgeklickt habe. Seit 1.1.0 war damit jede Serie auf dem
+  Fernseher unerreichbar.</p>
+
+  <h2>Was bewusst nicht drin ist</h2>
+  <ul>
+    <li><strong>36 Sprachen</strong> wie im Desktop-Player: die Sprache steht im Gerät,
+        nicht in der App. Auf einem Fernseher wäre das nur Ballast.</li>
+    <li><strong>Aufnahme</strong>: das alte README behauptete sie, im Code gab es sie nie.
+        Ohne beschreibbaren Speicher für Live-Mitschnitte baue ich das nicht vor.
+        Timeshift läuft.</li>
+    <li><strong>Offline-Downloads</strong>: bleiben ein Hinweis. Der TV hat keinen Platz dafür.</li>
+  </ul>
+
+  <div class="note"><p><strong>Zum Nachprüfen:</strong> Die App ist reines HTML und läuft
+  im Browser. Getestet habe ich sie mit Attrappen für Panel und Anbieter — sechs Sender,
+  ein Raster mit achtzehn Sendungen, durchgeschalteter Puffer, Staffel-Schlange. Der
+  Beweis ist aber erst die Installation auf dem Gerät.</p></div>
+
+  <h2>Installation</h2>
+  <p>webOS erlaubt keine Installation von außerhalb des Stores ohne Developer Mode:</p>
+  <ul>
+    <li>Am TV: <strong>Einstellungen → Allgemein → Über diesen Fernseher → Developer Mode</strong> einschalten</li>
+    <li>Die App „Developer Mode" am TV mit dem LG-Konto anmelden</li>
+    <li>Die <code>.ipk</code> über die Dev-Mode-App installieren</li>
+  </ul>
+  <p>Datei: <code>com.smartys.iptv_1.2.0_all.ipk</code> · 404 KB<br>
+  SHA256: <code>c2b16c1435cc0d924a79ffa2ed4e7e4a491bd7803a8b51371f1772dacd139cc2</code></p>
+
+  <div class="cta-row">
+    <a class="btn gold" href="https://github.com/smartonaut/smartys-iptv-webos/releases/download/v1.2.0/com.smartys.iptv_1.2.0_all.ipk">webOS 1.2.0 herunterladen (.ipk)</a>
+    <a class="btn ghost" href="https://github.com/smartonaut/smartys-iptv-webos">Quellcode auf GitHub</a>
+  </div>
+</div></article>
+
+<footer><div class="wrap" style="max-width:1140px">
+  © 2026 Smartys · <a href="/">Player</a><a href="/blog/">Neuigkeiten</a><a href="/impressum.html">Impressum</a><a href="/datenschutz.html">Datenschutz</a><a href="/agb.html">AGB</a>
+</div></footer>
+
+</body>
+</html>

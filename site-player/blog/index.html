@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Neuigkeiten zu Smartys Player: Releases für Fire TV, Android, Enigma2, LG webOS und Desktop — mit technischen Hintergründen.">
+<title>Neuigkeiten — Smartys Player</title>
+<link rel="canonical" href="https://player.smartys.tech/blog/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Neuigkeiten — Smartys Player">
+<meta property="og:url" content="https://player.smartys.tech/blog/">
+<meta property="og:image" content="https://player.smartys.tech/logo.png">
+<meta name="theme-color" content="#070a12">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link href="/fonts/inter.css" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#070a12; --panel:rgba(255,255,255,.04); --border:rgba(255,255,255,.08);
+    --text:#f2f5ff; --muted:#9aa7c4; --dim:#6b7896;
+    --gold:#ffc94d; --violet:#8b5cf6; --cyan:#22d3ee; --pink:#f472b6;
+  }
+  body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:900px; margin:0 auto; padding:0 24px; }
+  nav { position:sticky; top:0; z-index:20; background:rgba(7,10,18,.7); backdrop-filter:blur(20px) saturate(180%); border-bottom:1px solid var(--border); }
+  nav .wrap { max-width:1140px; display:flex; justify-content:space-between; align-items:center; padding:16px 24px; }
+  .logo { font-size:19px; font-weight:800; letter-spacing:-.3px; }
+  .logo .dot { color:var(--gold); }
+  .logo a { color:var(--dim); font-size:13px; text-decoration:none; margin-left:14px; font-weight:500; }
+  .btn { display:inline-block; padding:11px 22px; border-radius:12px; font-weight:600; font-size:14.5px; text-decoration:none; }
+  .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  main { padding:64px 0 90px; }
+  .kicker { font-size:13px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); }
+  h1 { font-size:clamp(32px,4.6vw,48px); font-weight:900; letter-spacing:-1.4px; margin:14px 0 16px; }
+  .lead { color:var(--muted); font-size:18px; max-width:620px; margin-bottom:48px; }
+  .post { display:block; text-decoration:none; background:var(--panel); border:1px solid var(--border);
+    border-radius:18px; padding:28px; margin-bottom:18px; transition:transform .2s, border-color .2s; }
+  .post:hover { transform:translateY(-3px); border-color:rgba(255,255,255,.2); }
+  .post .date { font-size:13px; color:var(--dim); font-weight:600; letter-spacing:.04em; }
+  .post h2 { color:var(--text); font-size:clamp(20px,2.6vw,26px); font-weight:800; letter-spacing:-.5px; margin:8px 0 10px; }
+  .post p { color:var(--muted); font-size:15.5px; }
+  .post .tag { display:inline-block; margin-top:16px; font-size:12.5px; font-weight:700; color:var(--gold);
+    background:rgba(255,201,77,.1); border:1px solid rgba(255,201,77,.32); border-radius:99px; padding:4px 12px; }
+  footer { border-top:1px solid var(--border); padding:36px 0; color:var(--dim); font-size:13.5px; }
+  footer a { color:var(--dim); text-decoration:none; margin-right:18px; }
+  footer a:hover { color:var(--gold); }
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo">Smartys<span class="dot">.</span>Player<a href="/">← zur Startseite</a></div>
+  <div><a class="btn ghost" href="https://github.com/smartonaut/smartys-iptv-webos">GitHub</a></div>
+</div></nav>
+
+<main><div class="wrap">
+  <div class="kicker">Neuigkeiten</div>
+  <h1>Was zuletzt gebaut wurde.</h1>
+  <p class="lead">Releases, Fehler und die Gründe dahinter — pro Plattform, ohne Marketing.</p>
+
+  <a class="post" href="/blog/webos-1-2-0.html">
+    <div class="date">27. Oktober 2026</div>
+    <h2>webOS 1.2.0: der Fernseher ist kein Handy</h2>
+    <p>Stillstands-Wächter, einstellbarer Puffer, Programmraster über sechs Stunden und
+    Staffel-Wiedergabe — dazu ein Fehler, der seit 1.1.0 jede Serie unerreichbar machte.</p>
+    <span class="tag">LG webOS</span>
+  </a>
+
+</div></main>
+
+<footer><div class="wrap" style="max-width:1140px">
+  © 2026 Smartys · <a href="/">Player</a><a href="/blog/">Neuigkeiten</a><a href="/impressum.html">Impressum</a><a href="/datenschutz.html">Datenschutz</a><a href="/agb.html">AGB</a>
+</div></footer>
+
+</body>
+</html>
