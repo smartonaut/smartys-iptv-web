@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Smartys Player 1.2.0 auf dem LG Fernseher installieren: Developer Mode einschalten, IP herausfinden, .ipk installieren, Playlist paaren — Schritt für Schritt.">
+<title>LG webOS: Smartys Player 1.2.0 installieren — Anleitung</title>
+<link rel="canonical" href="https://player.smartys.tech/webos-install.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="LG webOS: Smartys Player 1.2.0 installieren">
+<meta property="og:description" content="Developer Mode einschalten, IP herausfinden, .ipk installieren, Playlist paaren — Schritt für Schritt.">
+<meta property="og:url" content="https://player.smartys.tech/webos-install.html">
+<meta property="og:image" content="https://player.smartys.tech/logo.png">
+<meta name="theme-color" content="#070a12">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link href="/fonts/inter.css" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#070a12; --panel:rgba(255,255,255,.04); --border:rgba(255,255,255,.08);
+    --text:#f2f5ff; --muted:#9aa7c4; --dim:#6b7896;
+    --gold:#ffc94d; --violet:#8b5cf6; --cyan:#22d3ee; --pink:#f472b6;
+  }
+  body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.7; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:780px; margin:0 auto; padding:0 24px; }
+  nav { position:sticky; top:0; z-index:20; background:rgba(7,10,18,.7); backdrop-filter:blur(20px) saturate(180%); border-bottom:1px solid var(--border); }
+  nav .wrap { max-width:1140px; display:flex; justify-content:space-between; align-items:center; padding:16px 24px; }
+  .logo { font-size:19px; font-weight:800; letter-spacing:-.3px; }
+  .logo .dot { color:var(--gold); }
+  .logo a { color:var(--dim); font-size:13px; text-decoration:none; margin-left:14px; font-weight:500; }
+  .btn { display:inline-block; padding:11px 22px; border-radius:12px; font-weight:600; font-size:14.5px; text-decoration:none; }
+  .btn.gold { background:linear-gradient(135deg,var(--gold),#ffb347); color:#1a1200; }
+  .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  article { padding:64px 0 90px; }
+  .kicker { font-size:13px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold); }
+  h1 { font-size:clamp(30px,4.4vw,44px); font-weight:900; letter-spacing:-1.3px; line-height:1.15; margin:14px 0 18px; }
+  .meta { color:var(--dim); font-size:14px; margin-bottom:34px; }
+  h2 { font-size:clamp(21px,2.8vw,28px); font-weight:800; letter-spacing:-.5px; margin:44px 0 12px; }
+  h3 { font-size:18px; font-weight:700; margin:26px 0 6px; }
+  p { color:var(--muted); margin-bottom:14px; }
+  ol, ul { margin:0 0 18px 22px; color:var(--muted); }
+  li { margin-bottom:10px; }
+  strong { color:var(--text); }
+  code { background:rgba(255,255,255,.07); border:1px solid var(--border); border-radius:6px; padding:2px 6px; font-size:13.5px; color:var(--gold); }
+  .step { background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:22px 26px; margin:16px 0; }
+  .step .num { display:inline-block; width:30px; height:30px; line-height:30px; text-align:center; border-radius:50%;
+    background:rgba(255,201,77,.14); color:var(--gold); font-weight:800; margin-right:10px; }
+  .step h3 { display:inline-block; margin:0 0 8px 0; }
+  .note { background:rgba(255,201,77,.07); border:1px solid rgba(255,201,77,.3); border-radius:14px; padding:18px 22px; margin:22px 0; }
+  .note p { margin:0; color:var(--text); }
+  .cta-row { display:flex; gap:14px; flex-wrap:wrap; margin:30px 0 10px; }
+  footer { border-top:1px solid var(--border); padding:36px 0; color:var(--dim); font-size:13.5px; }
+  footer a { color:var(--dim); text-decoration:none; margin-right:18px; }
+  footer a:hover { color:var(--gold); }
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo">Smartys<span class="dot">.</span>Player<a href="/">← zur Startseite</a></div>
+  <div><a class="btn ghost" href="/blog/">Neuigkeiten</a></div>
+</div></nav>
+
+<article><div class="wrap">
+  <div class="kicker">Anleitung · LG webOS</div>
+  <h1>Smartys Player 1.2.0 auf dem LG Fernseher installieren</h1>
+  <div class="meta">Gilt für webOS 22 und neuer · Paket: com.smartys.iptv_1.2.0_all.ipk · 404 KB</div>
+
+  <div class="note"><p><strong>Warum überhaupt Developer Mode?</strong> LG lässt Apps nur aus dem eigenen Store zu.
+  Um eine eigene App zu installieren, muss der Fernseher in den Developer Mode. Solange der Dev Mode
+  aktiv ist, läuft die App. Wird er abgeschaltet, verschwindet sie wieder — das ist eine Sperre von LG,
+  keine Einstellung der App.</p></div>
+
+  <div class="step"><span class="num">1</span><h3>Developer Mode einschalten</h3>
+  <p>Am TV: <strong>Einstellungen → Alle Einstellungen → Allgemein → Über diesen Fernseher →
+  LG Developer Mode</strong>. Einschalten. Falls ein Konto verlangt wird: kostenloses
+  LG-Developer-Konto auf <code>developers.lg.com</code> anlegen. Der TV startet neu.</p></div>
+
+  <div class="step"><span class="num">2</span><h3>Developer-Mode-App am TV anmelden</h3>
+  <p>Nach dem Neustart liegt eine App <strong>„Developer Mode"</strong> auf dem Startbildschirm. Öffnen und
+  mit dem LG-Konto anmelden. Dort steht der sechsstellige <strong>Passcode</strong> — den braucht ihr gleich.
+  Die App muss angemeldet bleiben, sonst läuft die Sideload-App nach 48 Stunden ab.</p></div>
+
+  <div class="step"><span class="num">3</span><h3>IP-Adresse des TVs herausfinden</h3>
+  <p>Am TV: <strong>Einstellungen → Allgemein → Netzwerk → Verbindungsstatus</strong>. Dort steht die IP,
+  zum Beispiel <code>192.168.1.50</code>.</p></div>
+
+  <div class="step"><span class="num">4</span><h3>Paket installieren</h3>
+  <p><strong>Weg A — über die Developer-Mode-App:</strong> App am TV öffnen, „Web Server" bzw. „Upload"
+  wählen, die angezeigte Adresse am Computer im Browser öffnen und
+  <code>com.smartys.iptv_1.2.0_all.ipk</code> hochladen. Die App installiert sich selbst.</p>
+  <p><strong>Weg B — über USB:</strong> die <code>.ipk</code> auf einen FAT32/NTFS-Stick kopieren (nicht entpacken),
+  Stick in den TV, Developer-Mode-App → „Install from USB".</p>
+  <p><strong>Weg C — über das Netz (nur wenn ares-cli vorhanden ist):</strong></p>
+  <ol>
+    <li>Einmalig anmelden: <code>npx ares-setup-device -a &lt;TV-IP&gt; -p "&lt;Passcode&gt;"</code></li>
+    <li>Installieren: <code>npx ares-install --device &lt;TV-IP&gt; com.smartys.iptv_1.2.0_all.ipk</code></li>
+  </ol></div>
+
+  <div class="step"><span class="num">5</span><h3>App einrichten (Pairing)</h3>
+  <p>App „Smartys Player" starten. Der Freischalt-Bildschirm zeigt <strong>Player-ID</strong>,
+  <strong>Passwort</strong> und einen <strong>QR-Code</strong>.</p>
+  <ul>
+    <li><strong>QR-Weg:</strong> Code mit dem Handy scannen → öffnet
+        <code>panel.smartys.tech/pair?…</code> und koppelt den TV direkt.</li>
+    <li><strong>Klassisch:</strong> auf <code>panel.smartys.tech</code> mit Player-ID und Passwort anmelden
+        und die Playlist (Xtream-Zugangsdaten) hinterlegen.</li>
+  </ul>
+  <p>Danach am TV auf <strong>„Prüfen — Playlist laden"</strong> klicken. Kanäle, Filme und Serien werden geladen.</p></div>
+
+  <h2>Nachsehen, welche Version läuft</h2>
+  <p>In der App: <strong>Zahnrad → Über</strong>. Dort steht zum Beispiel
+  „Smartys Player 1.2.0 (webOS)". Direkt darunter zeigt die App, ob der Stillstands-Wächter aktiv ist und
+  wie oft er schon neu verbunden hat.</p>
+
+  <h2>Wenn der Ton fehlt oder das Bild stehen bleibt</h2>
+  <ul>
+    <li><strong>Bild friert ein, Tab-Wechsel hilft:</strong> Das ist der Fall, den der Stillstands-Wächter
+        ab 1.2.0 selbst löst — er verbindet nach drei Sekunden neu. Ältere Versionen können das nicht.</li>
+    <li><strong>Ruckelt es:</strong> Zahnrad → <em>Puffer ändern</em>. Höher stellen (8–12 s) glättet schwache
+        Leitungen, niedriger (3 s) schaltet schneller um.</li>
+    <li><strong>Schwarzes Bild bei einzelnen Sendern:</strong> Die App nutzt hls.js, bei älteren webOS-Versionen
+        automatisch natives HLS. Bleibt ein einzelner Sender schwarz, liegt es meist am Anbieter, nicht an der App.</li>
+  </ul>
+
+  <div class="cta-row">
+    <a class="btn gold" href="https://github.com/smartonaut/smartys-iptv-webos/releases/download/v1.2.0/com.smartys.iptv_1.2.0_all.ipk">webOS 1.2.0 herunterladen (.ipk)</a>
+    <a class="btn ghost" href="/blog/webos-1-2-0.html">Was in 1.2.0 neu ist</a>
+  </div>
+</div></article>
+
+<footer><div class="wrap" style="max-width:1140px">
+  © 2026 Smartys · <a href="/">Player</a><a href="/blog/">Neuigkeiten</a><a href="/impressum.html">Impressum</a><a href="/datenschutz.html">Datenschutz</a><a href="/agb.html">AGB</a>
+</div></footer>
+
+</body>
+</html>
