@@ -200,7 +200,13 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
     fun ensurePlayer(): RobustLivePlayer {
         val cur = player.value
         if (cur != null && !cur.released) return cur
-        return RobustLivePlayer(appCtx).also { player.value = it }
+        return RobustLivePlayer(appCtx).also {
+            // Gespeicherten Pegel anwenden — die alte Fire-TV-Fernbedienung hat
+            // keine Volume-Tasten, der Regler ist Links/Rechts im Player. Ohne
+            // das hier waere die Einstellung nach jedem Kanalwechsel weg.
+            it.player.volume = PlayPrefs.volume(appCtx)
+            player.value = it
+        }
     }
 
     // Position des laufenden VOD-Titels sichern und Playback beenden (Fortsetzen-Feature).
@@ -305,7 +311,13 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         advanceSuppressed = false
         advancing = false
         // Fortsetzen: gespeicherte Position beim Start wiederherstellen.
-        val resume = if (vod.startPosMs > 0L) vod.startPosMs else ResumeStore.position(appCtx, vod.key)
+        // fromStart = bewusst von vorne beginnen (Knopf "Von Anfang an").
+        val resume = when {
+            vod.fromStart -> 0L
+            vod.startPosMs > 0L -> vod.startPosMs
+            else -> ResumeStore.position(appCtx, vod.key)
+        }
+
         ensurePlayer().playChannel(vod.url, "vod:${vod.title}", startPosMs = resume)
     }
 
@@ -370,7 +382,7 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
             advancing = false
             nextPending = false
             val ep = seriesQueue!![seriesIndex]
-            val resume = ResumeStore.position(appCtx, ep.key)
+            val resume = if (ep.fromStart) 0L else ResumeStore.position(appCtx, ep.key)
             startEpisode(ep, resume)
         }
     }
@@ -709,6 +721,7 @@ fun VodPlayerScreen(
                     PlayerView(viewCtx).apply {
                         this.player = player
                         useController = false
+                        setKeepContentOnPlayerReset(true)
                         attachPlayerGestures(this,
                             onTap = { showOsd = !showOsd },
                             onDoubleTap = {
@@ -1008,6 +1021,104 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit, onSwitchProfile: () -
                         confirmButton = {
                             TextButton(onClick = { lineDialogFor = null }) {
                                 Text("Fertig", color = Color(0xFFFFC94D), fontSize = 15.sp)
+                            }
+                        },
+                        containerColor = Color(0xFF10141F)
+                    )
+                }
+            }
+        }
+
+        item {
+            Section("EPG") {
+                var auswahl by remember { mutableStateOf(EpgPrefs.lesen(ctx)) }
+                var urlText by remember { mutableStateOf(EpgPrefs.eigeneUrlLesen(ctx)) }
+                var urlDialog by remember { mutableStateOf(false) }
+                Text(
+                    "Programmdaten für \"Jetzt/Danach\" und Aufnahmen. Antippen schaltet eine Quelle ein oder aus; " +
+                        "abgeschaltete Quellen werden nicht geladen.",
+                    color = Color(0xFF8FA3C8), fontSize = 12.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                BtnSmall("Anbieter (deine Line)", selected = auswahl.anbieter) {
+                    auswahl = auswahl.copy(anbieter = !auswahl.anbieter)
+                    vm.setzeEpgAuswahl(auswahl, urlText)
+                }
+                Spacer(Modifier.height(6.dp))
+                BtnSmall("Eigener Link (Panel / Rytec)", selected = auswahl.eigenerLink) {
+                    auswahl = auswahl.copy(eigenerLink = !auswahl.eigenerLink)
+                    vm.setzeEpgAuswahl(auswahl, urlText)
+                }
+                Spacer(Modifier.height(6.dp))
+                BtnSmall("epg.pw (frei)", selected = auswahl.epgpw) {
+                    auswahl = auswahl.copy(epgpw = !auswahl.epgpw)
+                    vm.setzeEpgAuswahl(auswahl, urlText)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Eigene EPG-Adresse (XMLTV, .xml oder .xml.gz) — hat Vorrang vor dem Panel-Link:",
+                    color = Color(0xFF8FA3C8), fontSize = 12.sp
+                )
+                Spacer(Modifier.height(6.dp))
+                // Kein Eingabefeld direkt in der Liste: auf dem Fire-TV sprang es beim
+                // Durchscrollen in den Fokus und riss die Bildschirmtastatur auf.
+                // Jetzt öffnet erst ein Klick den Dialog.
+                BtnSmall(
+                    if (urlText.isBlank()) "Eigene Adresse eintragen …"
+                    else "Eigene Adresse: $urlText",
+                    selected = urlText.isNotBlank()
+                ) { urlDialog = true }
+                Spacer(Modifier.height(10.dp))
+                BtnSmall(if (vm.epgBusy.value) "lädt …" else "🔄 EPG jetzt aktualisieren") {
+                    if (!vm.epgBusy.value) vm.loadXmltvEpg(force = true)
+                }
+                if (vm.epgStatus.value.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(vm.epgStatus.value, color = Color(0xFF6B7A99), fontSize = 11.sp)
+                }
+
+                if (urlDialog) {
+                    AlertDialog(
+                        onDismissRequest = { urlDialog = false },
+                        title = { Text("Eigene EPG-Adresse", color = Color(0xFFE8EEFC), fontSize = 18.sp) },
+                        text = {
+                            Column {
+                                Text(
+                                    "XMLTV-Adresse (.xml oder .xml.gz). Sie hat Vorrang vor dem Panel-Link.",
+                                    color = Color(0xFF8FA3C8), fontSize = 12.sp
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                OutlinedTextField(
+                                    value = urlText,
+                                    onValueChange = { urlText = it },
+                                    singleLine = true,
+                                    label = { Text("https://…/epg.xml", fontSize = 13.sp) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color(0xFFE8EEFC),
+                                        unfocusedTextColor = Color(0xFFE8EEFC),
+                                        focusedBorderColor = Color(0xFFFFC94D),
+                                        unfocusedBorderColor = Color(0xFF2A3348)
+                                    )
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                urlDialog = false
+                                vm.setzeEpgAuswahl(auswahl, urlText)
+                            }) { Text("Speichern & laden", color = Color(0xFFFFC94D), fontSize = 15.sp) }
+                        },
+                        dismissButton = {
+                            Row {
+                                TextButton(onClick = {
+                                    urlText = ""
+                                    urlDialog = false
+                                    vm.setzeEpgAuswahl(auswahl, "")
+                                }) { Text("Entfernen", color = Color(0xFF8FA3C8), fontSize = 14.sp) }
+                                TextButton(onClick = { urlDialog = false }) {
+                                    Text("Abbrechen", color = Color(0xFF8FA3C8), fontSize = 14.sp)
+                                }
                             }
                         },
                         containerColor = Color(0xFF10141F)
@@ -2224,6 +2335,11 @@ fun PlayerScreen(
     onBack: () -> Unit
 ) {
     var showOverlay by remember { mutableStateOf(true) }
+    // Lautstaerke-Anzeige: erscheint beim Regeln mit Links/Rechts und blendet
+    // nach 1,5 s wieder aus. Die alte Fire-TV-Fernbedienung hat keine
+    // Volume-Tasten — ohne diese Anzeige waere die Aenderung unsichtbar.
+    var volOverlay by remember { mutableStateOf(-1f) }
+    var volShownAt by remember { mutableStateOf(0L) }
     var showReplay by remember { mutableStateOf(false) }
     val xmltvReady = vm.xmltvReady.value
     val epgInfo = remember(channel.streamId, xmltvReady) { vm.nowNext(channel) }
@@ -2313,6 +2429,21 @@ fun PlayerScreen(
                         } else false
                     }
                     Key.DirectionCenter, Key.Enter -> { showOverlay = !showOverlay; true }
+                    // Lautstaerke: Die alte Fire-TV-Fernbedienung (1./2. Gen) hat
+                    // KEINE eigenen Volume-Tasten — dort regelt sonst nur der
+                    // Fernseher. Links/Rechts sind im Player sonst unbelegt
+                    // (Hoch/Runter wechselt Sender), also nehmen wir sie dafuer.
+                    Key.DirectionLeft, Key.DirectionRight -> {
+                        val cur = player?.volume ?: 1f
+                        val next = if (keyEvent.key == Key.DirectionRight)
+                            (cur + 0.05f).coerceAtMost(1f)
+                        else (cur - 0.05f).coerceAtLeast(0f)
+                        player?.volume = next
+                        PlayPrefs.setVolume(appCtx, next)
+                        volOverlay = next
+                        volShownAt = System.currentTimeMillis()
+                        true
+                    }
                     Key.Back, Key.Escape -> { onBack(); true }
                     Key.Menu -> { showMenu = !showMenu; true }
                     else -> false
@@ -2324,6 +2455,13 @@ fun PlayerScreen(
                 PlayerView(viewCtx).apply {
                     this.player = player
                     useController = false
+                    // Letztes Bild auf dem Surface stehen lassen, wenn der Player
+                    // neu gepuffert wird (Reconnect). Default ist FALSE: dann
+                    // leert PlayerView den Surface bei jedem neuen MediaItem und
+                    // der Nutzer sieht einen schwarzen Schirm, obwohl das alte
+                    // Bild noch verfuegbar waere. Auf dem schwachen Stick ist
+                    // jeder Reconnect sichtbar — das hier nimmt ihm die Haelfte.
+                    setKeepContentOnPlayerReset(true)
                     attachPlayerGestures(this,
                         onTap = { showOverlay = !showOverlay },
                         onDoubleTap = {
@@ -2468,6 +2606,47 @@ fun PlayerScreen(
                 onClick = onBack,
                 modifier = Modifier.align(Alignment.TopEnd).padding(24.dp)
             ) { Text("← Zurück", color = Color.White) }
+        }
+
+        // ---- Lautstaerke-Anzeige ----
+        // Die alte Fire-TV-Fernbedienung hat keine Volume-Tasten; im Player
+        // regeln Links/Rechts den Pegel. Ohne sichtbare Rueckmeldung weiss
+        // niemand, wie laut es gerade ist — daher dieser Balken, der nach
+        // 1,5 s von selbst verschwindet.
+        val volSichtbar = volOverlay >= 0f &&
+                System.currentTimeMillis() - volShownAt < 1_500L
+        if (volSichtbar) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 56.dp)
+                    .width(16.dp)
+                    .height(220.dp)
+                    .background(Color(0xCC0B0E14), MaterialTheme.shapes.medium)
+            ) {
+                // Fuellung von unten nach oben
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(volOverlay.coerceIn(0f, 1f))
+                        .background(Color(0xFF7FB2FF), MaterialTheme.shapes.medium)
+                )
+            }
+            Text(
+                "${(volOverlay * 100).toInt()} %",
+                color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 84.dp)
+                    .background(Color(0xCC0B0E14), MaterialTheme.shapes.small)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+            // Nach Ablauf neu zeichnen, damit der Balken verschwindet
+            LaunchedEffect(volShownAt) {
+                kotlinx.coroutines.delay(1_600L)
+                volOverlay = -1f
+            }
         }
 
         // ---- Catch-up / Replay-Dialog ----

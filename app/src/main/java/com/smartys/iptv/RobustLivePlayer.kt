@@ -1,6 +1,8 @@
 package com.smartys.iptv
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
@@ -93,7 +95,16 @@ class RobustLivePlayer(private val ctx: Context) {
     private val maxBufferMs: Int = run {
         val requestedMs = if (requestedBufferSec > 0) requestedBufferSec * 1000 else bufferDurations[1]
         val capped = minOf(maxOf(requestedMs, minBufferMs), deviceMaxBufferMs)
-        val withLookback = maxOf(capped, liveLookbackMs)
+        // Timeshift (Lookback) braucht VIEL Puffer. Nur im LITE-Build wird er
+        // gegen die Geraetegrenze geklemmt: auf einem alten Stick killt ein
+        // 15-Minuten-Puffer den Decoder (Symptom: laeuft kurz an, dann weg).
+        // Der tv/phone-Build verhaelt sich unveraendert.
+        val lookbackErlaubt = !BuildConfig.LITE_DEVICE || liveLookbackMs in 1..deviceMaxBufferMs
+        val withLookback = if (lookbackErlaubt) maxOf(capped, liveLookbackMs) else capped
+        if (BuildConfig.LITE_DEVICE && liveLookbackMs > 0 && !lookbackErlaubt) {
+            Log.w("SmartysIPTV", "Timeshift ${liveLookbackMs / 1000}s deaktiviert: " +
+                    "Geraet verkraftet nur ${deviceMaxBufferMs / 1000}s Puffer")
+        }
         Log.i("SmartysIPTV", "Puffer: gewaehlt=${requestedBufferSec}s auto=${bufferDurations[1] / 1000}s " +
                 "geraet=${deviceMaxBufferMs / 1000}s -> ${withLookback / 1000}s")
         withLookback
@@ -111,6 +122,16 @@ class RobustLivePlayer(private val ctx: Context) {
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build()
+        )
+        // Ladefehler NICHT sofort fatal werden lassen. Der Standard wiederholt
+        // nur dreimal im Sekundentakt und gibt dann auf — bei einem 509 des
+        // Anbieters ist das zu kurz, und der Player warf dabei 20 s bereits
+        // gepuffertes Video weg, obwohl er sie haette weiterspielen koennen.
+        // Diese Policy klopft bei 509/429 deutlich spaeter erneut an, waehrend
+        // der Puffer leerlaeuft: kein Schwarzbild, kein Neustart.
+        .setMediaSourceFactory(
+            androidx.media3.exoplayer.source.DefaultMediaSourceFactory(ctx)
+                .setLoadErrorHandlingPolicy(VerbindungsLimitPolicy())
         )
         .build()
         .apply {
@@ -131,16 +152,117 @@ class RobustLivePlayer(private val ctx: Context) {
     private var currentChannelId: String? = null
     private var onChannelDead: ((String) -> Unit)? = null
     private var reconnectAttempts = 0
+
+    /**
+     * Der letzte Fehler war ein Verbindungslimit des Anbieters (HTTP 509/429).
+     * Dann ist schnelles Neuverbinden zwecklos: der Slot bleibt belegt, und
+     * jeder Versuch erzeugt einen weiteren Schwarzbild-Moment. scheduleReconnect
+     * wartet in diesem Fall 20-30 s statt 2 s.
+     */
+    private var letzterFehlerWarLimit = false
+
+    /** Erkennt "zu viele Verbindungen" in einer PlaybackException. */
+    private fun istVerbindungsLimit(error: PlaybackException): Boolean {
+        // Die Ursache steht in der Cause-Kette, nicht in der Message des
+        // PlaybackException — deshalb die Kette ablaufen statt zu raten.
+        var t: Throwable? = error
+        var tiefe = 0
+        while (t != null && tiefe < 8) {
+            val m = t.message ?: ""
+            if (m.contains("509") || m.contains("429") ||
+                m.contains("InvalidResponseCode", ignoreCase = true) && (m.contains("509") || m.contains("429"))
+            ) return true
+            // Manche Media3-Versionen liefern den Code nur im Cause-Objekt
+            if (t.javaClass.simpleName.contains("InvalidResponseCode")) {
+                val code = runCatching {
+                    t.javaClass.getMethod("getResponseCode").invoke(t) as? Int
+                }.getOrNull()
+                if (code == 509 || code == 429) return true
+            }
+            t = t.cause
+            tiefe++
+        }
+        return false
+    }
     private var scheduledReconnect = false
     private var pendingSeekMs: Long? = null
     private var isVod = false
     private var onVodEnded: (() -> Unit)? = null
     private var vodEndedFired = false
 
+    // ------------------------------------------------------------------
+    // Stillstands-Waechter (Paritaet zum Desktop-Player, dort 3 s).
+    //
+    // Bei einem haengenden Stream kommt KEIN Player-Fehler — der Decoder
+    // steht einfach. Ohne diesen Waechter bleibt das Bild stehen, bis der
+    // Nutzer den Sender wechselt. Er prueft im Sekundentakt, ob die
+    // Wiedergabeposition noch weiterlaeuft.
+    // ------------------------------------------------------------------
+    private val wdHandler = Handler(Looper.getMainLooper())
+    private var wdLastPos = -1L
+    private var wdStillMs = 0L
+    private var wdStartedAt = 0L
+    private var wdActive = false
+
+    private val wdTick = object : Runnable {
+        override fun run() {
+            try {
+                if (wdActive && !isVod && currentUrl != null) {
+                    val anlauf = System.currentTimeMillis() - wdStartedAt
+                    // Anlaufphase: der Puffer muss sich erst fuellen.
+                    if (anlauf > 15_000L
+                        && player.playbackState == Player.STATE_READY
+                        && player.isPlaying
+                    ) {
+                        val pos = player.currentPosition
+                        if (pos == wdLastPos && pos > 0L) {
+                            wdStillMs += 1000L
+                            if (wdStillMs >= 3_000L) {
+                                Log.w("SmartysIPTV",
+                                    "Live-Wiedergabe steht seit ${wdStillMs}ms -> Reconnect")
+                                wdStillMs = 0L
+                                scheduleReconnect()
+                            }
+                        } else {
+                            wdStillMs = 0L
+                            wdLastPos = pos
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.d("SmartysIPTV", "Waechter: ${e.message}")
+            }
+            if (wdActive) wdHandler.postDelayed(this, 1000L)
+        }
+    }
+
+    private fun wdStart() {
+        wdStartedAt = System.currentTimeMillis()
+        wdLastPos = -1L
+        wdStillMs = 0L
+        if (!wdActive) {
+            wdActive = true
+            wdHandler.postDelayed(wdTick, 1000L)
+        }
+    }
+
+    private fun wdStop() {
+        wdActive = false
+        wdHandler.removeCallbacks(wdTick)
+    }
+
     init {
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 Log.e("SmartysIPTV", "Player-Fehler (errorCode=${error.errorCodeName}): ${error.message}")
+                // Verbindungslimit erkennen: der Anbieter antwortet mit 509
+                // (Bandwidth/Connections) oder 429 (Too Many Requests). Dann
+                // ist schnelles Neuverbinden sinnlos — der Slot bleibt belegt.
+                letzterFehlerWarLimit = istVerbindungsLimit(error)
+                if (letzterFehlerWarLimit) {
+                    Log.w("SmartysIPTV", "Verbindungslimit des Anbieters erreicht — " +
+                            "warte laenger statt im 2-s-Takt neu anzuklopfen")
+                }
                 scheduleReconnect()
             }
 
@@ -162,6 +284,9 @@ class RobustLivePlayer(private val ctx: Context) {
                 if (state == Player.STATE_READY) {
                     reconnectAttempts = 0
                     scheduledReconnect = false
+                    // Limit-Flag zuruecksetzen: der Stream laeuft wieder, beim
+                    // naechsten Abbruch darf der schnelle Backoff greifen.
+                    letzterFehlerWarLimit = false
                     // Gewünschte Position (Fortsetzen oder Reconnect) erst nach READY anspringen.
                     pendingSeekMs?.let { ms ->
                         pendingSeekMs = null
@@ -186,13 +311,31 @@ class RobustLivePlayer(private val ctx: Context) {
         reconnectAttempts = 0
         scheduledReconnect = false
         pendingSeekMs = if (startPosMs > 0L) startPosMs else null
+        // LITE: vor dem Dekoderstart Hintergrunddienste freigeben. Ohne das
+        // bleibt auf einem 875-MB-Stick zu wenig fuer Videopuffer (gemessen:
+        // +70 MB frei). Nur im lite-Build, tv/phone unveraendert.
+        if (BuildConfig.LITE_DEVICE) {
+            Thread {
+                try {
+                    MemoryGuard.aufraeumen(ctx)
+                } catch (e: Exception) {
+                    Log.w("SmartysIPTV", "Aufraeumen fehlgeschlagen: ${e.javaClass.simpleName}")
+                }
+            }.start()
+        }
         startStream()
     }
 
-    private fun startStream() {
+    private fun startStream(istReconnect: Boolean = false) {
         val url = currentUrl ?: return
         player.apply {
-            stop()  // alter State weg, Reconnect ist sauber
+            // Bei einem RECONNECT kein stop(): das loescht das letzte Bild und
+            // der Nutzer sieht einen schwarzen Schirm, obwohl oft nur eine
+            // Sekunde fehlt. setMediaItem + prepare auf der laufenden Instanz
+            // laesst das letzte Frame stehen, bis wirklich neue Daten kommen.
+            // Beim KanalWECHSEL wird dagegen sauber gestoppt (kein altes Bild
+            // des vorherigen Senders stehen lassen).
+            if (!istReconnect) stop()
             val item = MediaItem.Builder()
                 .setUri(url)
                 .setLiveConfiguration(
@@ -205,7 +348,8 @@ class RobustLivePlayer(private val ctx: Context) {
             prepare()
             play()
         }
-        Log.d("SmartysIPTV", "Stream gestartet/gestartet-neu: $url")
+        Log.d("SmartysIPTV", "Stream ${if (istReconnect) "neu verbunden" else "gestartet"}: $url")
+        wdStart()
     }
 
     private fun scheduleReconnect() {
@@ -222,25 +366,31 @@ class RobustLivePlayer(private val ctx: Context) {
             }
         }
 
+        // Bei einem Verbindungslimit NICHT laenger warten: gestern lief es mit
+        // dem kurzen 2-s-Takt 1,5 Stunden lang mit max. 1-2 s Aussetzern.
+        // Lange Pausen (20/30 s) haben daraus 20-40 s Standbild gemacht — die
+        // Wartezeit war schlimmer als der Fehler selbst.
         val delayMs = when {
             reconnectAttempts == 0 -> 2_000L
-            reconnectAttempts == 1 -> 4_000L
-            reconnectAttempts == 2 -> 8_000L
-            reconnectAttempts == 3 -> 16_000L
-            else -> 30_000L
+            reconnectAttempts == 1 -> 3_000L
+            reconnectAttempts == 2 -> 5_000L
+            else -> 8_000L
         }
         reconnectAttempts++
-        Log.w("SmartysIPTV", "Reconnect in ${delayMs / 1000}s (Versuch $reconnectAttempts)")
+        Log.w("SmartysIPTV", "Reconnect in ${delayMs / 1000}s (Versuch $reconnectAttempts" +
+                (if (letzterFehlerWarLimit) ", Verbindungslimit" else "") + ")")
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             scheduledReconnect = false
             // Nur wenn der Titel noch aktuell ist (User könnte inzwischen umgeschaltet haben)
             if (currentUrl != null) {
-                startStream()
+                // istReconnect = true: kein stop(), das letzte Bild bleibt stehen
+                startStream(istReconnect = true)
             }
         }, delayMs)
     }
 
     fun stop() {
+        wdStop()
         currentUrl = null
         currentChannelId = null
         player.stop()
@@ -262,6 +412,7 @@ class RobustLivePlayer(private val ctx: Context) {
      */
     fun shutdown() {
         if (released) return
+        wdStop()
         val freiVorher = freiMb()
         try {
             player.stop()
@@ -301,5 +452,16 @@ object PlayPrefs {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("buffer_sec", 0)
     fun setBufferSec(ctx: Context, sec: Int) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt("buffer_sec", sec).apply()
+    }
+    /**
+     * Lautstaerke 0.0-1.0. Wird gebraucht, weil die alte Fire-TV-Fernbedienung
+     * keine Volume-Tasten hat: im Player regeln Links/Rechts den Pegel, und
+     * der Wert muss den Kanalwechsel ueberleben.
+     */
+    fun volume(ctx: Context): Float =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getFloat("volume", 1f)
+    fun setVolume(ctx: Context, v: Float) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putFloat("volume", v.coerceIn(0f, 1f)).apply()
     }
 }

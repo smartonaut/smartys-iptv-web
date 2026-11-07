@@ -38,39 +38,37 @@ _login_attempts: dict[str, list[int]] = {}
 RATE_LIMIT = 8          # Versuche
 RATE_WINDOW = 15 * 60   # pro 15 Minuten
 
-# ---- In-Memory-Cache für entsperrte Nutzer-Schlüssel (Web-Session) ----
-# sid -> (key, mac, expires_at). Der Schlüssel selbst landet NIE im Cookie
-# (Cookie trägt nur die zufällige sid). TTL wie die Web-Session: 12h.
-_SEC_KEYS: dict[str, tuple[bytes, str, float]] = {}
+# ---- Entsperr-Schlüssel in der signierten Session (worker- und restart-fest) ----
+# Vorher lag der Key in einem Prozess-Dict (_SEC_KEYS) und im Cookie nur eine sid.
+# Der Container läuft aber mit "--workers 2": nach dem Entsperren traf die
+# nächste Anfrage oft den ANDEREN Worker, der zu der sid keinen Key hatte ->
+# Passwort-Abfrage mitten im Speichern, teils 2-3x hintereinander.
+# Jetzt liegt der Key mit dem App-Key (crypto.encrypt) verschlüsselt in der
+# Session: der Browser sieht nur Chiffrat, und alle Worker + Neustarts teilen
+# denselben Stand. TTL wie die Web-Session: 12h.
 _SEC_TTL = 12 * 3600
 
 
-def _sec_sid(request: Request) -> str:
-    return request.session.get("sec_sid", "") or ""
-
-
 def _cached_sec_key(request: Request, mac: str):
-    """Key aus dem Cache holen (falls sid bekannt + nicht abgelaufen)."""
-    sid = _sec_sid(request)
-    entry = _SEC_KEYS.get(sid)
-    if not entry:
+    """Entsperr-Key aus der Session holen (falls vorhanden + nicht abgelaufen)."""
+    raw = request.session.get("sec_key_enc") or ""
+    if not raw:
         return None
-    key, cached_mac, expires = entry
-    if cached_mac != mac or time.time() > expires:
-        _SEC_KEYS.pop(sid, None)
+    try:
+        payload = json.loads(crypto.decrypt(raw))
+        if payload.get("mac") != mac or time.time() > float(payload.get("exp", 0)):
+            request.session.pop("sec_key_enc", None)
+            return None
+        return bytes.fromhex(payload["k"])
+    except Exception:
+        request.session.pop("sec_key_enc", None)
         return None
-    return key
 
 
 def _cache_sec_key(request: Request, mac: str, key: bytes):
-    sid = secrets.token_urlsafe(24)
-    request.session["sec_sid"] = sid
-    _SEC_KEYS[sid] = (key, mac, time.time() + _SEC_TTL)
-    # Aufräumen abgelaufener Einträge (bei Gelegenheit).
-    if len(_SEC_KEYS) > 200:
-        now = time.time()
-        for s in [s for s, v in _SEC_KEYS.items() if v[2] < now]:
-            _SEC_KEYS.pop(s, None)
+    request.session["sec_key_enc"] = crypto.encrypt(
+        json.dumps({"mac": mac, "k": key.hex(), "exp": time.time() + _SEC_TTL})
+    )
 
 
 def _rate_limited(mac: str) -> bool:
@@ -113,6 +111,21 @@ def qr_code(mac: str = "", pw: str = ""):
     from urllib.parse import urlencode
     target = "https://panel.smartys.tech/pair?" + urlencode({"mac": mac, "pw": pw})
     img = qrcode.make(target, box_size=10, border=2)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/qrdata")
+def qr_data(url: str = ""):
+    """Generischer QR für eine beliebige http(s)-URL (z.B. lokale
+    Handy-Eingabe-URL des Entsperren-Screens)."""
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(400, "url muss http(s) sein")
+    import qrcode
+    import io
+    img = qrcode.make(url, box_size=10, border=2)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
@@ -411,6 +424,31 @@ def api_player_info(mac: str):
             "name": p["name"]}
 
 
+@app.post("/api/v1/player/delete")
+async def api_player_delete(mac: str = None, password: str = None,
+                            request: Request = None):
+    """'Pairing loeschen' im App-Pairing-Screen: entfernt den Player komplett
+    aus dem Panel (Lines + Pairing). Auth ueber MAC + Pairing-Passwort."""
+    if mac is None or password is None:
+        try:
+            body = await request.form()
+            mac = mac or body.get("mac")
+            password = password or body.get("password")
+        except Exception:
+            pass
+    if not mac or not password:
+        raise HTTPException(422, "mac und password erforderlich")
+    mac = db.normalize_mac(mac)
+    if _rate_limited("api:" + mac):
+        raise HTTPException(429)
+    if not db.get_player(mac):
+        raise HTTPException(404, "Player nicht gefunden")
+    if not db.verify_pairing(mac, password):
+        raise HTTPException(401, "Ungültige Pairing-Daten")
+    db.delete_player(mac)
+    return {"ok": True}
+
+
 @app.post("/api/v1/redeem")
 async def api_redeem(request: Request):
     """App reicht Lizenz-Token ein (den NUR der Admin erstellen kann) =>
@@ -476,6 +514,74 @@ def api_tmdb_movie(tmdb_id: str):
     return data
 
 
+# ---------- OMDb-Bewertungen (IMDb, Rotten Tomatoes, Metacritic) ----------
+# Analog zum TMDB-Proxy: Der Key liegt nur im Backend-Env, die App sieht ihn nie.
+# Die Noten aendern sich langsam, deshalb 7 Tage Cache — das schont das
+# kostenlose Tageslimit von 1.000 Abfragen deutlich.
+
+OMDB_CACHE_DIR = Path("/data/omdb_cache")
+
+
+@app.get("/api/v1/ratings/{imdb_id}")
+def api_ratings(imdb_id: str):
+    """Bewertungen zu einer IMDb-Kennung (tt...)."""
+    api_key = os.environ.get("OMDB_API_KEY", "")
+    if not api_key:
+        raise HTTPException(503, "OMDb nicht konfiguriert (OMDB_API_KEY fehlt)")
+    if not (imdb_id.startswith("tt") and imdb_id[2:].isdigit()):
+        raise HTTPException(400, "Ungueltige IMDb-ID")
+
+    cache_file = OMDB_CACHE_DIR / f"{imdb_id}.json"
+    try:
+        if cache_file.exists():
+            age = time.time() - cache_file.stat().st_mtime
+            if age < 7 * 24 * 3600:
+                return json.loads(cache_file.read_text())
+    except Exception:
+        pass
+
+    import urllib.request
+    url = f"https://www.omdbapi.com/?i={imdb_id}&apikey={api_key}"
+    try:
+        with urllib.request.urlopen(url, timeout=8) as r:
+            data = json.loads(r.read())
+    except Exception:
+        raise HTTPException(502, "OMDb nicht erreichbar")
+
+    if data.get("Response") == "False":
+        fehler = data.get("Error", "nicht gefunden")
+        # Ein ungueltiger Key ist ein Serverproblem, kein fehlender Film
+        if "key" in fehler.lower():
+            raise HTTPException(503, "OMDb-Key abgelehnt")
+        raise HTTPException(404, fehler)
+
+    def wert(name):
+        roh = data.get(name)
+        return None if roh in (None, "", "N/A") else roh
+
+    quellen = {}
+    for eintrag in data.get("Ratings") or []:
+        quelle = eintrag.get("Source")
+        if quelle:
+            quellen[quelle] = eintrag.get("Value")
+
+    ergebnis = {
+        "imdb_id": imdb_id,
+        "imdb": wert("imdbRating"),
+        "imdb_stimmen": wert("imdbVotes"),
+        "metascore": wert("Metascore"),
+        "rotten_tomatoes": quellen.get("Rotten Tomatoes"),
+        "metacritic": quellen.get("Metacritic"),
+    }
+
+    try:
+        OMDB_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps(ergebnis))
+    except Exception:
+        pass
+    return ergebnis
+
+
 @app.post("/api/v1/support")
 async def api_support(request: Request):
     """Support-Anfrage aus der App -> Log-Datei (Admin liest /data/support.log)."""
@@ -492,6 +598,30 @@ async def api_support(request: Request):
     with open(SUPPORT_FILE, "a", encoding="utf-8") as f:
         f.write(entry)
     return {"ok": True}
+
+
+
+# ---------- Rytec-EPG (unabhängig vom Anbieter) -------------------------------
+# Liefert ein XMLTV aus den Rytec-Dateien, die auch das Enigma2-Plugin nutzt.
+# Gedacht als "eigener EPG-Link" im Panel (Feld epg_url), damit Player auch
+# dann Programm haben, wenn der Anbieter sein xmltv.php nicht mehr aktualisiert.
+@app.get("/epg/rytec.xml")
+def epg_rytec_xml():
+    import epg_rytec
+    pfad = epg_rytec.datei()
+    if not pfad:
+        return Response(status_code=503, content=b"EPG wird noch aufgebaut")
+    with open(pfad, "rb") as f:
+        daten = f.read()
+    return Response(
+        content=daten,
+        media_type="application/gzip",
+        headers={
+            "Cache-Control": "public, max-age=1800",
+            "X-EPG-Quelle": "rytec-de",
+            "X-EPG-Groesse": str(len(daten)),
+        },
+    )
 
 
 @app.on_event("startup")

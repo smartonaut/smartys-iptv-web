@@ -28,20 +28,38 @@ android {
         create("tv") {
             dimension = "target"
             applicationId = "com.smartys.iptv"
-            versionCode = 50
-            versionName = "0.8.31"
+            versionCode = 60
+            versionName = "0.8.41"
             buildConfigField("boolean", "USE_KEYSTORE_STORE", "false")
             buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "true")
+            buildConfigField("boolean", "LITE_DEVICE", "false")
+            manifestPlaceholders["appName"] = "Smarty Player"
         }
         // Handy (Android 16): eigene App-ID, Keystore-Speicher (Crash-Fix).
         create("phone") {
             dimension = "target"
             applicationId = "com.smartys.iptv.mobile"
             minSdk = 23
-            versionCode = 29
-            versionName = "0.8.9"
+            versionCode = 30
+            versionName = "0.8.10"
             buildConfigField("boolean", "USE_KEYSTORE_STORE", "true")
             buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "false")
+            buildConfigField("boolean", "LITE_DEVICE", "false")
+            manifestPlaceholders["appName"] = "Smarty Player Handy"
+        }
+        // LITE: fuer alte Fire-TV-Sticks (1./2. Gen, Android 5.x, 875 MB RAM,
+        // 96-MB-Heap). Eigene App-ID, damit die normale TV-Version auf neueren
+        // Geraeten unberuehrt bleibt. LITE_DEVICE schaltet die Sparmassnahmen:
+        // kurzes EPG-Fenster, kleiner Bild-Cache, kein UHD, fix kleiner Puffer.
+        create("lite") {
+            dimension = "target"
+            applicationId = "com.smartys.iptv.lite"
+            versionCode = 8
+            versionName = "0.1.8"
+            buildConfigField("boolean", "USE_KEYSTORE_STORE", "false")
+            buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "true")
+            buildConfigField("boolean", "LITE_DEVICE", "true")
+            manifestPlaceholders["appName"] = "Smarty Player Lite"
         }
     }
 
@@ -93,4 +111,6 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.zxing:core:3.5.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    testImplementation("junit:junit:4.13.2")
 }

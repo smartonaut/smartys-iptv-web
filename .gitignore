@@ -34,8 +34,3 @@ __pycache__/
 
 # ---------- Quellen-Backups (lokale tgz-Snapshots, nie einchecken) ----------
 backups/
-
-# ---------- Grosse Binaer-Downloads (IPA/IPK nicht ins Repo) ----------
-*.ipa
-*.ipk
-site-player/ipa/*.ipa

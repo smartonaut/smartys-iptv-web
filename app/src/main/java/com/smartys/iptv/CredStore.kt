@@ -23,6 +23,8 @@ object CredStore {
     private const val K_PROVIDERS = "providers_json"
     private const val K_PLAYER_ID = "player_id"
     private const val K_PAIRING_PW = "pairing_pw"
+    /** Herkunft der Player-ID: "hw-v1" (stabil abgeleitet) | "random" (nicht stabil). */
+    private const val K_PLAYER_ID_SOURCE = "player_id_source"
 
     private val useKeystore = BuildConfig.USE_KEYSTORE_STORE
 
@@ -54,29 +56,51 @@ object CredStore {
     }
 
     /**
-     * Player-ID: rein kryptographischer Zufall (SecureRandom), 6 Bytes im
-     * MAC-Format. ABSICHTLICH NICHT aus der Geraete-MAC abgeleitet:
-     * - Jede deterministische Ableitung (HMAC etc.) waere mit dem in der App
-     *   eingebetteten Salt per Brute-Force zur Geraete-MAC ZURUECKRECHENBAR
-     *   (Reverse Engineering) — genau das soll verhindert werden.
-     * - Zufall = es gibt schlicht nichts zurueckzurechnen.
-     * Stabilität: einmal generiert, verschlüsselt gespeichert, commit()
-     * (synchron) — überlebt App-Starts und Updates. Nur ein vollständiger
-     * App-Daten-Wipe erzeugt eine neue ID (wie bei IBPlayer: neu registrieren).
-     * Byte 0 = lokal-admin-Bit (02:...) => keine Kollision mit echten Hardware-MACs.
+     * Player-ID nach PLAYER-IDENTITY.md (v1). Auflösungsreihenfolge:
+     *  1. Gespeicherte ID ist UNANTASTBAR — wird NIE neu abgeleitet, geändert
+     *     oder migriert (die Panel-Line ist per AES-GCM-AAD an genau diese
+     *     ID gebunden; eine andere ID = zugewiesene Line unwiederbringlich weg).
+     *  2. Keine gespeicherte ID: deterministisch aus gerätestabilen Merkmalen
+     *     ableiten (PlayerIdentity.deviceSeed: ANDROID_ID + Hersteller +
+     *     Modell, NIE die Hardware-MAC) — dieselbe Hardware ergibt nach
+     *     Neuinstallation/Reflash wieder dieselbe ID (Quelle "hw-v1").
+     *  3. Sind keine Merkmale lesbar (ANDROID_ID leer): Zufall via
+     *     SecureRandom (Quelle "random" — dann NICHT reinstall-stabil).
+     *
+     * Warum deterministische Ableitung VERTRETBAR ist, obwohl der frühere
+     * Kommentar davor warnte (Rückrechenbarkeit zur Geräte-MAC): In den Seed
+     * fließt KEINE MAC, sondern ANDROID_ID + Build.MANUFACTURER + Build.MODEL.
+     * ANDROID_ID ist seit Android 8 pro App-Signaturschlüssel + Nutzer stabil
+     * und überlebt die Neuinstallation der App. Und die Player-ID ist ohnehin
+     * KEIN Geheimnis, sondern eine öffentliche Kennung wie eine MAC (steht
+     * lesbar im Pairing-Screen und in der Panel-URL) — die Sicherheit liegt
+     * im Pairing-Passwort. SHA-256 ist irreversibel: aus der veröffentlichten
+     * ID lässt sich nichts zurückrechnen, was nicht ohnehin öffentlich wäre.
      */
     @Synchronized
     fun playerId(ctx: Context): String {
         val p = prefs(ctx)
+        // Stufe 1: gespeicherte ID unantastbar, nur lesen.
         getSecure(p, K_PLAYER_ID)?.let { return it }
-        val bytes = ByteArray(6)
-        java.security.SecureRandom().nextBytes(bytes)
-        bytes[0] = ((bytes[0].toInt() and 0xFE) or 0x02).toByte()   // lokal administriert
-        val id = bytes.joinToString(":") { String.format("%02X", it) }
+        // Stufe 2/3: deterministisch ableiten oder — ohne lesbare Merkmale — würfeln.
+        val seed = PlayerIdentity.deviceSeed(ctx)
+        val id: String
+        val source: String
+        if (seed.isNotEmpty()) {
+            id = PlayerIdentity.derivePlayerId(seed)
+            source = "hw-v1"
+        } else {
+            val bytes = ByteArray(6)
+            java.security.SecureRandom().nextBytes(bytes)
+            bytes[0] = ((bytes[0].toInt() and 0xFE) or 0x02).toByte()   // lokal administriert
+            id = bytes.joinToString(":") { String.format("%02X", (it.toInt() and 0xFF)) }
+            source = "random"
+        }
         // commit() statt apply(): synchrone Disk-Speicherung. Die Player-ID ist
         // PAIRING-KRITISCH — ein verlorener async-Write wuerde beim naechsten
         // Start eine NEUE ID generieren und die Web-Registrierung entkoppeln.
         putSecure(p, K_PLAYER_ID, id)
+        putSecure(p, K_PLAYER_ID_SOURCE, source)
         return id
     }
 
@@ -110,7 +134,8 @@ object CredStore {
     fun saveAll(ctx: Context, providers: List<Creds>) {
         val arr = org.json.JSONArray()
         providers.forEach { c ->
-            arr.put(org.json.JSONObject().put("url", c.url).put("user", c.user).put("pass", c.pass))
+            arr.put(org.json.JSONObject().put("url", c.url).put("user", c.user)
+                .put("pass", c.pass).put("epg", c.epgUrl))
         }
         putSecure(prefs(ctx), K_PROVIDERS, arr.toString())
         // Legacy-Einzelfelder weiterhin pflegen (primary = erster) für Rückwärtskompatibilität
@@ -123,7 +148,13 @@ object CredStore {
         }
     }
 
-    data class Creds(val url: String, val user: String, val pass: String) {
+    data class Creds(
+        val url: String,
+        val user: String,
+        val pass: String,
+        /** Optionaler eigener EPG-Link (z. B. XMLTV-Export eines Receivers). */
+        val epgUrl: String = ""
+    ) {
         /**
          * Stabiler Schluessel fuer die Profil-Bindung: URL + User. Ueberlebt
          * Umbenennungen der Line im Panel (anders als der Listen-Index).
@@ -160,7 +191,8 @@ object CredStore {
                 val arr = org.json.JSONArray(json)
                 (0 until arr.length()).map { i ->
                     val o = arr.getJSONObject(i)
-                    Creds(o.getString("url"), o.getString("user"), o.getString("pass"))
+                    Creds(o.getString("url"), o.getString("user"), o.getString("pass"),
+                        o.optString("epg", ""))
                 }
             }.getOrDefault(emptyList())
         }

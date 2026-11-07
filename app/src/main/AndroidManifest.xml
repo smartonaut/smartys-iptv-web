@@ -3,15 +3,21 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- MemoryGuard: auf schwachen Sticks Hintergrunddienste (Alexa,
+         Tastatur, Telemetrie) freigeben, solange der Player laeuft. -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <application
         android:name=".IptvApp"
-        android:label="Smarty Player"
+        android:label="${appName}"
         android:icon="@mipmap/ic_launcher"
         android:banner="@mipmap/banner"
         android:usesCleartextTraffic="true"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:theme="@style/Theme.SmartysIPTV"
         android:networkSecurityConfig="@xml/network_security_config">
 
