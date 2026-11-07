@@ -52,6 +52,7 @@
   .apps h2 { font-size:14px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--dim); text-align:center; margin-bottom:28px; }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:22px; }
   .app { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:30px; text-decoration:none; color:var(--text); display:flex; flex-direction:column; transition:transform .2s, border-color .2s; }
+  .more { display:inline-block; margin-top:10px; font-size:13.5px; font-weight:600; color:var(--gold); }
   .app:hover { transform:translateY(-5px); border-color:rgba(255,201,77,.5); }
   .app .top { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
   .app .icon { width:48px; height:48px; border-radius:12px; background:linear-gradient(135deg,#11172a,#1a2440); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:22px; }
@@ -102,7 +103,6 @@
 
 <section class="apps"><div class="wrap">
   <h2>Unsere Apps</h2>
-  <p class="sub" style="margin:10px 0 0;">Smartys Player — Live-TV, Filme und Serien auf Fire TV, Android, PC und Enigma2.</p>
   <div class="grid">
     <a class="app" href="https://player.smartys.tech">
       <div class="top">
@@ -114,17 +114,7 @@
       <span class="cta">Zum Player <span>→</span></span>
     </a>
 
-    <a class="app" href="https://player.smartys.tech">
-      <div class="top">
-        <span class="icon">🖥️</span>
-        <span class="name">Smartys Player Desktop</span>
-        <span class="tag">Live</span>
-      </div>
-      <p class="desc">Live-TV, Filme und Serien am PC: Timeshift-Pause, EPG-Timer-Aufnahmen mit Hintergrund-Daemon, universelle Suche, Weiterschauen nach Unterbrechung, Film-Downloads. Für Linux (DEB/RPM) und Windows.</p>
-      <span class="cta">Zum Player <span>→</span></span>
-    </a>
-
-    <a class="app" href="mailto:kontakt@smartys.tech?subject=VinCatcher">
+        <a class="app" href="mailto:kontakt@smartys.tech?subject=VinCatcher">
       <div class="top">
         <span class="icon">🚗</span>
         <span class="name">VinCatcher</span>
@@ -171,6 +161,17 @@
       <p class="desc">Der schlanke Download-Beschleuniger: segmentierte Downloads, Resume, Torrent und Zeitplan — für Windows, Ubuntu und Debian, mit verschlüsseltem Download.</p>
       <span class="cta">Jetzt entdecken <span>→</span></span>
     </a>
+
+    <a class="app" href="/himalaya.html">
+      <div class="top">
+        <span class="icon">💌</span>
+        <span class="name">Smartys Himalaya GUI</span>
+        <span class="tag">Neu</span>
+      </div>
+      <p class="desc">Post für 32 Konten in einer ruhigen Oberfläche: lesen, antworten, Signaturen. Der weltweit einzige grafische Client für himalaya — als Programm für Windows und Linux, oder im Browser. Läuft mit deinen bestehenden Postfächern, auf Wunsch über einen himalaya-Server im Netzwerk.</p>
+      <span class="more">Zur Anleitung →</span>
+    </a>
+
 
   </div>
     <div class="soon" style="margin-top:22px;">

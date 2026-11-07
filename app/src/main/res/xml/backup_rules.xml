@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto-Backup (API <= 30, fullBackupContent): Die Prefs-Datei mit Player-ID,
+     Pairing-Passwort und Provider-Zugängen muss eine App-Neuinstallation
+     überleben (Spiegel je Plattform: Android/TV — siehe PLAYER-IDENTITY.md).
+     Hinweis: <include>-Regeln bedeuten, dass NUR die hier gelisteten Dateien
+     gesichert werden. -->
+<full-backup-content>
+    <include domain="sharedpref" path="smartys_iptv_creds.xml" />
+</full-backup-content>

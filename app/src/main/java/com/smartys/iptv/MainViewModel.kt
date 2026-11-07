@@ -187,37 +187,115 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- XMLTV-EPG (Provider-weite EPG-Quelle) ----------
 
-    /** Lädt das XMLTV des Providers (xmltv.php) im Hintergrund. Danach Fallback-EPG (epg.pw). */
-    fun loadXmltvEpg() {
-        val c = creds ?: return
+    /** EPG-Ladezustand für die Einstellungen (Fortschritt + Klartext-Meldung). */
+    val epgBusy = mutableStateOf(false)
+    val epgStatus = mutableStateOf("")
+    /** Adresse, mit der der Zusatz-EPG-Index aktuell gefüllt ist. */
+    private var extraGeladenVon: String = ""
+
+    /**
+     * Lädt alle in den Einstellungen freigegebenen EPG-Quellen.
+     * Reihenfolge beim Nachschlagen: Anbieter (tvg-id) -> eigener/zuletzt
+     * eingetragener Link (Kanalname) -> epg.pw (Kanalname).
+     *
+     * @param force true = Zwischenspeicher verwerfen und alles neu laden
+     *              (Einstellungen -> "EPG jetzt aktualisieren")
+     */
+    fun loadXmltvEpg(force: Boolean = false) {
+        val app = getApplication<android.app.Application>()
+        val auswahl = EpgPrefs.lesen(app)
+        val eigeneUrl = EpgPrefs.eigeneUrlLesen(app)
         viewModelScope.launch(Dispatchers.IO) {
-            val url = "${c.url}/xmltv.php?username=${c.user}&password=${c.pass}"
-            val ok = XmltvEpg.ensureLoaded(getApplication(), url)
-            if (ok) {
-                withContextMain { xmltvReady.value = true }
-                // Fallback für Kanäle ohne Provider-EPG (Sky Sport Einzelkanäle, DAZN...)
-                val fbOk = XmltvEpg.loadFallback(getApplication())
-                if (fbOk) {
-                    withContextMain { fallbackReady.value = true }
+            // Fehlt in den gespeicherten Zugangsdaten der EPG-Link (typisch nach
+            // einer Installation über eine ältere Version: die Zugangsdaten
+            // bleiben erhalten, das Feld kam erst später dazu), einmal die
+            // Provider-Liste beim Panel neu holen. Sonst bliebe der eigene
+            // EPG-Link für immer leer, ohne dass irgendwo etwas fehlschlägt.
+            val gespeichert = creds
+            if (gespeichert != null && gespeichert.epgUrl.isBlank()) {
+                val pid = CredStore.playerId(app)
+                val ppw = CredStore.pairingPw(app)
+                if (pid.isNotBlank() && ppw.isNotBlank()) {
+                    android.util.Log.d("SmartysIPTV", "EPG: Zugangsdaten ohne EPG-Link — hole sie neu")
+                    runCatching { pairAndLoad(pid, ppw) }
                 }
             }
+            val c = creds
+            withContextMain { epgBusy.value = true; epgStatus.value = "Lade EPG …" }
+            if (force) XmltvEpg.clearFiles(app)
+            val meldungen = mutableListOf<String>()
+
+            // 1. Anbieter-XMLTV
+            if (auswahl.anbieter && c != null && c.url.isNotBlank()) {
+                val url = "${c.url}/xmltv.php?username=${c.user}&password=${c.pass}"
+                val ok = runCatching { XmltvEpg.ensureLoaded(app, url, force) }.getOrDefault(false)
+                withContextMain { xmltvReady.value = ok }
+                meldungen += if (ok) {
+                    if (XmltvEpg.isProviderFresh()) "Anbieter: aktuell"
+                    else "Anbieter: Daten abgelaufen"
+                } else "Anbieter: nicht erreichbar"
+            } else if (!auswahl.anbieter) {
+                meldungen += "Anbieter: aus"
+            }
+
+            // 2. Eigener Link — vom Nutzer eingetragene Adresse hat Vorrang,
+            //    sonst der im Panel hinterlegte EPG-Link.
+            // Reihenfolge: eigene Adresse -> Panel-Link -> mitgelieferter Standard.
+            // Der Standard macht EPG auch dann nutzbar, wenn im Panel nichts
+            // hinterlegt ist oder die Zugangsdaten alt sind.
+            val zusatz = eigeneUrl.ifBlank { c?.epgUrl ?: "" }
+                .ifBlank { "https://panel.smartys.tech/epg/rytec.xml" }
+            if (auswahl.eigenerLink && zusatz.isNotBlank()) {
+                if (extraGeladenVon.isNotEmpty() && extraGeladenVon != zusatz) {
+                    XmltvEpg.clearFiles(app)   // andere Adresse -> alter Index passt nicht mehr
+                }
+                val ok = runCatching { XmltvEpg.ensureExtraLoaded(app, zusatz, force) }.getOrDefault(false)
+                extraGeladenVon = if (ok) zusatz else ""
+                meldungen += if (ok) {
+                    if (XmltvEpg.isExtraFresh()) "Eigener Link: aktuell" else "Eigener Link: ohne aktuelle Daten"
+                } else "Eigener Link: Fehler"
+            } else if (!auswahl.eigenerLink) {
+                meldungen += "Eigener Link: aus"
+            }
+
+            // 3. freies epg.pw
+            if (auswahl.epgpw) {
+                val ok = runCatching { XmltvEpg.loadFallback(app, force) }.getOrDefault(false)
+                withContextMain { fallbackReady.value = ok }
+                meldungen += if (ok && XmltvEpg.isFallbackFresh()) "epg.pw: aktuell"
+                else if (ok) "epg.pw: ohne aktuelle Daten" else "epg.pw: Fehler"
+            } else {
+                meldungen += "epg.pw: aus"
+            }
+
+            val stand = meldungen.joinToString(" · ")
+            android.util.Log.d("SmartysIPTV", "EPG: $stand")
+            withContextMain {
+                epgStatus.value = stand
+                epgBusy.value = false
+            }
         }
+    }
+
+    /** Einstellungen: EPG-Auswahl speichern und sofort neu laden. */
+    fun setzeEpgAuswahl(a: EpgPrefs.Auswahl, eigeneUrl: String? = null) {
+        val app = getApplication<android.app.Application>()
+        EpgPrefs.schreiben(app, a)
+        if (eigeneUrl != null) EpgPrefs.eigeneUrlSchreiben(app, eigeneUrl)
+        loadXmltvEpg(force = true)
     }
 
     val xmltvReady = mutableStateOf(false)
     val fallbackReady = mutableStateOf(false)
 
-    /** "Jetzt"-EPG für einen Kanal: Provider-XMLTV zuerst, dann epg.pw-Fallback per Name. */
-    fun nowNext(ch: LiveStream): Pair<XmltvProgramme?, XmltvProgramme?> {
-        // 1. Provider-EPG per tvg-id
-        val (cur, next) = XmltvEpg.getNowAndNext(ch.epgChannelId)
-        if (cur != null || next != null) return cur to next
-        // 2. Fallback: per normalisiertem Kanalname (nur wenn Kanal keine EPG-ID hat)
-        if (ch.epgChannelId.isNullOrBlank()) {
-            return XmltvEpg.fallbackNowAndNext(ch.name)
-        }
-        return null to null
-    }
+    /**
+     * "Jetzt"-EPG für einen Kanal. Reihenfolge der Quellen:
+     * 1. Provider-XMLTV per tvg-id  — nur wenn dessen Daten nicht abgelaufen sind
+     * 2. eigener EPG-Link aus dem Panel (z. B. Receiver) per Kanalname
+     * 3. freies epg.pw-EPG per normalisiertem Kanalname
+     */
+    fun nowNext(ch: LiveStream): Pair<XmltvProgramme?, XmltvProgramme?> =
+        XmltvEpg.bestNowAndNext(ch.epgChannelId, ch.name)
 
     private fun decodeB64(s: String): String? = try {
         val decoded = android.util.Base64.decode(s.trim(), android.util.Base64.DEFAULT)
@@ -496,7 +574,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     label = p.optString("label"),
                     cipherServerUrl = p.optString("cipher_server_url"),
                     cipherUsername = p.optString("cipher_username"),
-                    cipherPassword = p.optString("cipher_password")
+                    cipherPassword = p.optString("cipher_password"),
+                    cipherEpgUrl = p.optString("cipher_epg_url")
                 )
             }.filter { it.cipherServerUrl.isNotBlank() }
             unlockError = ""
@@ -512,7 +591,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             CredStore.Creds(
                 p.optString("server_url"),
                 p.optString("username"),
-                p.optString("password")
+                p.optString("password"),
+                p.optString("epg_url", "")
             )
         }.filter { it.url.isNotBlank() && it.user.isNotBlank() }
         if (providers.isEmpty()) return@runCatching false
@@ -544,7 +624,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val url = SecCrypto.decryptField(key, p.cipherServerUrl, pendingPlayerId)
                 val user = SecCrypto.decryptField(key, p.cipherUsername, pendingPlayerId)
                 val pass = SecCrypto.decryptField(key, p.cipherPassword, pendingPlayerId)
-                if (url.isNotBlank() && user.isNotBlank()) CredStore.Creds(url, user, pass) else null
+                val epg = if (p.cipherEpgUrl.isBlank()) "" else
+                    runCatching { SecCrypto.decryptField(key, p.cipherEpgUrl, pendingPlayerId) }
+                        .getOrDefault("")
+                if (url.isNotBlank() && user.isNotBlank()) CredStore.Creds(url, user, pass, epg) else null
             }
         } catch (e: Exception) {
             android.util.Log.w("SmartysIPTV", "unlockLine: Entschluesselung fehlgeschlagen", e)

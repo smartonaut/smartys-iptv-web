@@ -40,7 +40,15 @@ import coil.compose.AsyncImage
 
 // ---------- VOD / Serien-Typen für die Wiedergabe ----------
 
-data class VodPlayback(val url: String, val title: String, val key: String, val startPosMs: Long = 0L)
+data class VodPlayback(
+    val url: String,
+    val title: String,
+    val key: String,
+    val startPosMs: Long = 0L,
+    /** true = diese Folge/ diesen Film auf jeden Fall von 0 starten (gespeicherte Position ignorieren). */
+    val fromStart: Boolean = false
+)
+
 
 // ---------- Filme-Grid ----------
 
@@ -79,7 +87,13 @@ fun MovieGrid(
     // Ruecksprung aus der Detailseite: zum zuletzt geoeffneten Film scrollen + fokussieren
     val restoreIdx = shown.indexOfFirst { it.streamId == focusRestoreId }
     val firstCatFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    LaunchedEffect(focusRestoreId, shown.size) {
+    // NUR beim Einstieg/Ruecksprung laufen, nicht bei jeder Aenderung der Liste:
+    // vorher stand shown.size im Key — dann hat jeder getippte Buchstabe im Suchfeld
+    // die Liste gefiltert, den Effekt neu gestartet und den Fokus nach 150 ms aufs
+    // Kategoriemenue gezogen. Ergebnis: nur ein Buchstabe landete im Feld.
+    val fokusSperre = searchArmed || searchFocused
+    LaunchedEffect(focusRestoreId) {
+        if (fokusSperre) return@LaunchedEffect
         if (restoreIdx >= 0) {
             kotlinx.coroutines.delay(150)
             runCatching {
@@ -302,7 +316,11 @@ fun SeriesGrid(
     val seriesRestoreFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val firstCatFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val restoreIdx = shown.indexOfFirst { it.seriesId == focusRestoreId }
-    LaunchedEffect(focusRestoreId, shown.size) {
+    // Gleiche Falle wie im Filme-Tab: shown.size darf kein Key sein, sonst klaut
+    // der Fokus-Ruecksprung nach jedem getippten Buchstaben das Suchfeld.
+    val seriesFokusSperre = seriesSearchArmed || seriesSearchFocused
+    LaunchedEffect(focusRestoreId) {
+        if (seriesFokusSperre) return@LaunchedEffect
         if (restoreIdx >= 0) {
             kotlinx.coroutines.delay(150)
             runCatching {
@@ -486,26 +504,48 @@ fun SeriesDetail(
                 }
                 Spacer(Modifier.height(20.dp))
 
-                // Staffel-Auswahl
+                val activeSeason = seasonKeys.firstOrNull { selectedSeason == it.toIntOrNull() } ?: seasonKeys.firstOrNull()
+
+                // Staffel-Auswahl: Dropdown (wie Prime) — alle Staffeln als vertikale Liste,
+                // D-Pad hoch/runter zum Wechseln. Kein horizontales Scrollen mehr nötig.
                 LazyColumn(Modifier.weight(1f)) {
                     item {
                         Text("Staffeln", color = Color(0xFF8FA3C8), fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                        Row(Modifier.padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            seasonKeys.forEach { sk ->
-                                val isSel = selectedSeason == sk.toIntOrNull() || (selectedSeason == null && sk == seasonKeys.firstOrNull())
-                                Surface(
-                                    onClick = { selectedSeason = sk.toIntOrNull() },
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (isSel) Color(0xFFFFC94D) else Color(0xFF141A2A),
-                                    border = if (!isSel) androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF232C42)) else null
-                                ) {
-                                    Text("Staffel $sk", color = if (isSel) Color(0xFF0B0E14) else Color(0xFF8FA3C8), fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                        var seasonExpanded by remember { mutableStateOf(false) }
+                        Box {
+                            Surface(
+                                onClick = { seasonExpanded = true },
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF141A2A),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                                    Text("Staffel ${activeSeason ?: "?"}", color = Color(0xFFE8EEFC), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text("▾", color = Color(0xFFFFC94D), fontSize = 14.sp)
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = seasonExpanded,
+                                onDismissRequest = { seasonExpanded = false }
+                            ) {
+                                seasonKeys.forEach { sk ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Staffel $sk",
+                                                color = if (activeSeason == sk) Color(0xFFFFC94D) else Color(0xFFE8EEFC),
+                                                fontWeight = if (activeSeason == sk) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        },
+                                        onClick = { selectedSeason = sk.toIntOrNull(); seasonExpanded = false }
+                                    )
                                 }
                             }
                         }
+                        Spacer(Modifier.height(16.dp))
                     }
                     // Episoden der gewählten Staffel
-                    val activeSeason = seasonKeys.firstOrNull { selectedSeason == it.toIntOrNull() } ?: seasonKeys.firstOrNull()
                     val eps = activeSeason?.let { episodes[it] }.orEmpty()
                     // Wiedergabeliste: Episoden der Staffel numerisch sortiert => Auto-Advance
                     val playlist = eps.sortedBy { it.episodeNum?.toIntOrNull() ?: Int.MAX_VALUE }
@@ -524,34 +564,75 @@ fun SeriesDetail(
                             else -> "error"
                         }
                         val epTitle = ep.title ?: "Episode ${ep.episodeNum}"
+                        val epResume = remember(ep.id) { ResumeStore.position(ctx, "series:${ep.id}") }
+                        val epCanResume = epResume > 30_000L
+                        fun buildList(cr: CredStore.Creds, fromStartEpId: String?): List<VodPlayback> =
+                            playlist.map { e ->
+                                VodPlayback(
+                                    cr.seriesUrl(e.id, e.containerExtension ?: "mp4"),
+                                    e.title ?: "${show.name} S${activeSeason}E${e.episodeNum}",
+                                    key = "series:${e.id}",
+                                    fromStart = e.id == fromStartEpId
+                                )
+                            }
+                        // Ganze Zeile = Container (nicht klickbar). Der Titel-Bereich ist
+                        // ein EIGENER Knopf, die kleinen Knöpfe rechts sind seine
+                        // GESCHWISTER — als Kinder eines klickbaren Surface käme das
+                        // D-Pad der Fernbedienung nicht an sie heran.
                         Surface(
-                            onClick = {
-                                c?.let {
-                                    val list = playlist.map { e ->
-                                        VodPlayback(
-                                            c.seriesUrl(e.id, e.containerExtension ?: "mp4"),
-                                            e.title ?: "${show.name} S${activeSeason}E${e.episodeNum}",
-                                            key = "series:${e.id}"
-                                        )
-                                    }
-                                    onPlaySeries(list, idx)
-                                }
-                            },
                             shape = RoundedCornerShape(10.dp),
                             color = if (epFocused) Color(0xFF1A2238) else Color(0xFF10141F),
                             border = if (epFocused) androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D)) else null,
                             modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
-                                .onFocusChanged { epFocused = it.isFocused }
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                                Text("S${activeSeason ?: "?"}E${ep.episodeNum ?: "-"}", color = Color(0xFF55648A), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(56.dp))
-                                Text(epTitle, color = if (epFocused) Color(0xFFE8EEFC) else Color(0xFFE8EEFC), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                // Download-Button (pro Episode): offline speichern / Status
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    onClick = { c?.let { cr -> onPlaySeries(buildList(cr, null), idx) } },
+                                    color = Color.Transparent,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).onFocusChanged { epFocused = it.isFocused }
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                                        Text("S${activeSeason ?: "?"}E${ep.episodeNum ?: "-"}", color = Color(0xFF55648A), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(56.dp))
+                                        Text(epTitle, color = Color(0xFFE8EEFC), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                        if (epCanResume) {
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("bei ${epResume / 60000} Min", color = Color(0xFF55648A), fontSize = 12.sp)
+                                        }
+                                        Spacer(Modifier.width(10.dp))
+                                        Text("▶", color = if (epFocused) Color(0xFFFFC94D) else Color(0xFF8FA3C8), fontSize = 14.sp)
+                                    }
+                                }
+                                // "von Anfang an" — bei JEDER Folge (Smarty: Button muss bei allen Serien da sein,
+                                // nicht nur bei angefangenen). Bei Folgen ohne gespeicherte Position ist der
+                                // clear harmlos und fromStart=true startet ohnehin bei 0.
+                                var rsFocus by remember(ep.id) { mutableStateOf(false) }
+                                Surface(
+                                    onClick = {
+                                        c?.let { cr ->
+                                            ResumeStore.clear(ctx, "series:${ep.id}")
+                                            onPlaySeries(buildList(cr, ep.id), idx)
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (rsFocus) Color(0xFFFFC94D) else Color(0xFF0B0E14),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D)),
+                                    modifier = Modifier.onFocusChanged { rsFocus = it.isFocused }
+                                ) {
+                                    Text(
+                                        "↺ Von Anfang",
+                                        color = if (rsFocus) Color(0xFF0B0E14) else Color(0xFFFFC94D),
+                                        fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                // Download-Knopf (pro Episode): offline speichern / Status
                                 var dlFocus by remember { mutableStateOf(false) }
                                 Surface(
                                     onClick = {
-                                        c?.let {
-                                            val url = c.seriesUrl(ep.id, ep.containerExtension ?: "mp4")
+                                        c?.let { cr ->
+                                            val url = cr.seriesUrl(ep.id, ep.containerExtension ?: "mp4")
                                             when (dlState) {
                                                 "idle", "error" -> VodDownloader.start(ctx, dlId, "${show.name} S${activeSeason}E${ep.episodeNum} - ${epTitle}", url, ep.containerExtension ?: "mp4")
                                                 "running" -> VodDownloader.pause(dlId)
@@ -584,11 +665,10 @@ fun SeriesDetail(
                                             else -> Color(0xFF8FA3C8)
                                         },
                                         fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                                     )
                                 }
-                                Spacer(Modifier.width(10.dp))
-                                Text("▶", color = if (epFocused) Color(0xFFFFC94D) else Color(0xFF8FA3C8), fontSize = 14.sp)
+                                Spacer(Modifier.width(14.dp))
                             }
                         }
                     }
@@ -711,7 +791,7 @@ fun MovieDetail(
                         onClick = {
                             val c = vm.creds ?: return@Surface
                             ResumeStore.clear(ctx, "movie:${movie.streamId}")
-                            onPlay(VodPlayback(c.movieUrl(movie.streamId, movie.containerExtension ?: "mp4"), movie.name, key = "movie:${movie.streamId}", startPosMs = 0L))
+                            onPlay(VodPlayback(c.movieUrl(movie.streamId, movie.containerExtension ?: "mp4"), movie.name, key = "movie:${movie.streamId}", startPosMs = 0L, fromStart = true))
                         },
                         shape = RoundedCornerShape(12.dp),
                         color = Color(0xFF141A2A),

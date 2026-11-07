@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Smartys Himalaya GUI — der einzige grafische Client für himalaya. Post für viele Konten in einer ruhigen Oberfläche. Für Windows und Linux, oder im Browser.">
+<title>Smartys Himalaya GUI — E-Mail ohne Ballast | Smartys</title>
+<link rel="canonical" href="https://smartys.tech/himalaya.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Smartys">
+<meta property="og:title" content="Smartys Himalaya GUI — E-Mail ohne Ballast">
+<meta property="og:description" content="Der einzige grafische Client für himalaya. Viele Konten, eine ruhige Oberfläche. Windows, Linux oder Browser.">
+<meta property="og:url" content="https://smartys.tech/himalaya.html">
+<meta property="og:image" content="https://smartys.tech/himalaya-logo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Smartys Himalaya GUI — E-Mail ohne Ballast">
+<meta name="twitter:description" content="Der einzige grafische Client für himalaya. Viele Konten, eine ruhige Oberfläche.">
+<meta name="twitter:image" content="https://smartys.tech/himalaya-logo.png">
+<link rel="icon" type="image/png" href="himalaya-logo.png">
+<link href="fonts/inter.css" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#080b14; --panel:#101522; --card:#131a2b; --border:#1e2638;
+    --text:#eef2fb; --muted:#94a0bd; --dim:#5f6c89; --gold:#ffc94d;
+    --code:#0b1020;
+  }
+  body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.65; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 24px; }
+
+  nav { position:sticky; top:0; z-index:20; background:rgba(8,11,20,.82); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); }
+  nav .wrap { display:flex; justify-content:space-between; align-items:center; padding:18px 24px; max-width:1080px; }
+  nav .links { display:flex; gap:8px; align-items:center; }
+  .btn { display:inline-block; padding:11px 22px; border-radius:12px; font-weight:600; font-size:14.5px; text-decoration:none; border:none; cursor:pointer; transition:transform .15s, box-shadow .2s; }
+  .btn:hover { transform:translateY(-2px); }
+  .btn.gold { background:linear-gradient(135deg,var(--gold),#ffb347); color:#1a1200; box-shadow:0 6px 24px rgba(255,201,77,.35); }
+  .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  .btn.ghost:hover { border-color:rgba(255,255,255,.25); background:rgba(255,255,255,.1); }
+  .logo { font-size:20px; font-weight:800; letter-spacing:-.4px; text-decoration:none; color:var(--text); }
+  .logo .dot { color:var(--gold); }
+  .logo .tech { background:linear-gradient(90deg,var(--gold),#f472b6,#8b5cf6,#22d3ee); -webkit-background-clip:text; background-clip:text; color:transparent; }
+
+  header.hero { padding:64px 0 40px; text-align:center; }
+  header.hero img.mark { width:112px; height:112px; border-radius:26px; box-shadow:0 18px 50px rgba(0,0,0,.6), 0 0 0 1px rgba(255,201,77,.25); margin-bottom:26px; }
+  h1 { font-size:clamp(30px,5vw,46px); line-height:1.15; letter-spacing:-1.2px; font-weight:800; }
+  h1 .gold { background:linear-gradient(90deg,var(--gold),#ffb347); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .lead { color:var(--muted); font-size:17.5px; margin:16px auto 0; max-width:620px; }
+  .badges { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:22px; }
+  .badge { font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid var(--border); color:var(--muted); }
+  .badge.gold { background:rgba(255,201,77,.12); border-color:rgba(255,201,77,.35); color:var(--gold); }
+  .cta { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:32px; }
+
+  h2 { font-size:24px; letter-spacing:-.5px; margin:56px 0 18px; font-weight:750; }
+  h2 .num { color:var(--dim); font-weight:600; margin-right:10px; }
+  h3 { font-size:17px; margin:26px 0 10px; font-weight:650; }
+  p { color:var(--muted); margin-bottom:12px; }
+  p strong, li strong { color:var(--text); font-weight:650; }
+  a { color:var(--gold); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+
+  .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:24px; margin:18px 0; }
+  .card.gold { border-color:rgba(255,201,77,.3); background:linear-gradient(160deg,rgba(255,201,77,.06),var(--card)); }
+
+  ul { list-style:none; margin:12px 0; }
+  ul li { color:var(--muted); padding-left:26px; position:relative; margin-bottom:9px; }
+  ul li::before { content:"—"; position:absolute; left:0; color:var(--gold); font-weight:700; }
+
+  pre { background:var(--code); border:1px solid var(--border); border-radius:12px; padding:16px 18px; overflow-x:auto; margin:12px 0; font-size:13.5px; line-height:1.7; }
+  code { font-family:'JetBrains Mono',ui-monospace,Menlo,monospace; font-size:.92em; }
+  p code, li code, td code { background:var(--code); border:1px solid var(--border); border-radius:6px; padding:1.5px 6px; color:var(--gold); }
+  pre code { background:none; border:none; padding:0; color:#cfd8ef; }
+
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:14.5px; }
+  th, td { text-align:left; padding:11px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:12.5px; text-transform:uppercase; letter-spacing:.6px; }
+  td { color:var(--muted); }
+  td:first-child { color:var(--text); font-weight:600; white-space:nowrap; }
+
+  .shots { display:grid; gap:14px; margin:18px 0; }
+  .shots img { width:100%; border-radius:14px; border:1px solid var(--border); display:block; }
+
+  .version { border-left:2px solid var(--border); padding-left:20px; margin-bottom:26px; position:relative; }
+  .version::before { content:""; position:absolute; left:-6px; top:7px; width:10px; height:10px; border-radius:50%; background:var(--gold); box-shadow:0 0 0 3px var(--bg); }
+  .version .vhead { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; margin-bottom:8px; }
+  .version .vnum { font-weight:750; font-size:17px; color:var(--text); }
+  .version .vdate { font-size:13px; color:var(--dim); }
+  .version ul { margin:6px 0 0; }
+  .version ul li { font-size:14.5px; margin-bottom:6px; }
+
+  footer { border-top:1px solid var(--border); margin-top:70px; padding:32px 0 48px; text-align:center; }
+  footer p { font-size:13.5px; color:var(--dim); margin:0; }
+  footer a { color:var(--muted); }
+  .note { font-size:13.5px; color:var(--dim); border-left:2px solid var(--border); padding-left:14px; margin:16px 0; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="/">Smartys<span class="dot">.</span><span class="tech">tech</span></a>
+    <div class="links">
+      <a class="btn ghost" href="/">Alle Apps</a>
+      <a class="btn gold" href="https://github.com/smartonaut/smartys-himalaya-gui/releases">Herunterladen</a>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <header class="hero">
+    <img class="mark" src="himalaya-logo.png" alt="Smartys Himalaya GUI">
+    <h1>Post für <span class="gold">alle Konten</span><br>in einer ruhigen Oberfläche</h1>
+    <p class="lead">Der weltweit einzige grafische Client für himalaya. Schlank, dunkel, ohne Ballast — und mit einem Verbindungs-Zahnrad, das die Postfächer auch dort lässt, wo sie hingehören.</p>
+    <div class="badges">
+      <span class="badge gold">Version 0.1.0</span>
+      <span class="badge">Windows 10/11</span>
+      <span class="badge">Linux</span>
+      <span class="badge">Im Browser</span>
+      <span class="badge">Freie Lizenz</span>
+    </div>
+    <div class="cta">
+      <a class="btn gold" href="https://github.com/smartonaut/smartys-himalaya-gui/releases/download/v0.1.0/SmartysHimalayaGUI-0.1.0-Setup.exe">Windows-Installer</a>
+      <a class="btn ghost" href="https://github.com/smartonaut/smartys-himalaya-gui/releases/download/v0.1.0/smartys-himalaya-gui_0.1.0_all.deb">Linux-Paket (DEB)</a>
+    </div>
+    <p class="note" style="text-align:left;margin-top:26px;">
+      Diese Seite beschreibt ehrlich, was die Anwendung kann — und was noch nicht. Keine Werbeversprechen.
+    </p>
+  </header>
+
+  <h2><span class="num">01</span>Was es ist</h2>
+  <p><strong>himalaya</strong> ist ein Kommandozeilen-Programm, das E-Mail-Konten verwaltet: lesen, antworten, verschieben, Flags setzen. Sehr mächtig, sehr schnell — aber unsichtbar. Bis jetzt gab es dafür <strong>keine Oberfläche</strong>.</p>
+  <p>Smartys Himalaya GUI legt eine ruhige, dunkle Oberfläche darüber. Keine Cloud dazwischen, kein Konto bei einem Anbieter: Die Anwendung spricht direkt mit dem himalaya auf deinem Rechner — oder auf einem anderen, wenn deine Postfächer dort liegen.</p>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Was es kann</h3>
+    <ul>
+      <li><strong>Beliebig viele Konten</strong> in einer Liste, mit Ordnerbaum je Konto — im Test 32 Postfächer</li>
+      <li><strong>Anbieter-Erkennung:</strong> Adresse eingeben, Server werden automatisch gefüllt (Gmail, GMX, T-Online, Web.de, IONOS und weitere)</li>
+      <li><strong>Antworten im Thread-Stil</strong> mit Zitat, mehrere Signaturen je Konto, Signaturgruppen</li>
+      <li><strong>Suche</strong> innerhalb des Kontos, deutsche Ordnerbezeichnungen</li>
+      <li><strong>Echte Absenderadresse</strong> in der Liste, nicht nur der Anzeigename — wichtig für Spam-Erkennung</li>
+      <li><strong>Verbindungs-Zahnrad:</strong> himalaya läuft lokal oder auf einem anderen Rechner per SSH</li>
+      <li><strong>Drei Fassungen</strong> aus einer Codebasis: Windows-Programm, Linux-Fenster, Browser</li>
+    </ul>
+  </div>
+
+  <div class="card gold">
+    <h3 style="margin-top:0;">Was noch fehlt</h3>
+    <ul style="margin-bottom:0;">
+      <li>Anhänge versenden (empfangene Anhänge werden angezeigt)</li>
+      <li>Entwürfe dauerhaft speichern</li>
+      <li>Push-Benachrichtigungen bei neuer Post</li>
+    </ul>
+  </div>
+
+  <h2><span class="num">02</span>Installation</h2>
+
+  <h3>Windows 10 / 11</h3>
+  <p>Der Installer enthält alles: das Programm, die Mail-Engine himalaya und die Oberfläche. Auf dem Zielrechner muss <strong>nichts</strong> vorinstalliert sein — kein Python, kein himalaya, kein Zusatzpaket.</p>
+  <div class="card">
+    <ul>
+      <li><strong>Schritt 1:</strong> Installer herunterladen und doppelklicken</li>
+      <li><strong>Schritt 2:</strong> Windows zeigt eventuell „Weitere Informationen" → <strong>Trotzdem ausführen</strong> (das Programm ist nicht signiert; ein Zertifikat kostet jährlich Geld)</li>
+      <li><strong>Schritt 3:</strong> Durchklicken. Keine Administratorrechte nötig — die Installation landet im eigenen Benutzerprofil</li>
+      <li><strong>Schritt 4:</strong> Startmenü → <strong>Smartys Himalaya GUI</strong></li>
+    </ul>
+    <p style="margin-bottom:0;">Deinstallieren: Einstellungen → Apps → Smartys Himalaya GUI. Die Konten-Einstellungen bleiben dabei erhalten.</p>
+  </div>
+
+  <h3>Linux (Debian, Ubuntu, Mint)</h3>
+  <pre><code>sudo dpkg -i smartys-himalaya-gui_0.1.0_all.deb
+sudo apt-get install -f</code></pre>
+  <p>Danach steht die Anwendung im Anwendungsmenü. Zusätzlich läuft sie als Dienst im Hintergrund und ist im Browser unter <code>http://127.0.0.1:8770</code> erreichbar.</p>
+  <p>Wer lieber ohne Paket arbeitet:</p>
+  <pre><code>git clone https://github.com/smartonaut/smartys-himalaya-gui
+cd smartys-himalaya-gui
+pip install --user .
+python3 -m smartys_mail</code></pre>
+
+  <h2><span class="num">03</span>Konten einrichten</h2>
+  <p>Beim ersten Start ist die Liste leer und der Assistent öffnet sich von selbst. Er fragt nur, was er wirklich wissen muss.</p>
+
+  <table>
+    <tr><th>Feld</th><th>Was hinein gehört</th></tr>
+    <tr><td>Name</td><td>Beliebig, nur für dich — zum Beispiel <code>privat</code> oder <code>firma</code></td></tr>
+    <tr><td>Adresse</td><td>Deine vollständige E-Mail-Adresse</td></tr>
+    <tr><td>Anzeigename</td><td>Was Empfänger sehen, wenn du schreibst</td></tr>
+    <tr><td>Passwort</td><td>Bei Gmail ein <strong>App-Passwort</strong>, nicht das Kontopasswort</td></tr>
+  </table>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Gmail: App-Passwort erzeugen</h3>
+    <p>Google lässt Programme nur mit einem eigenen Passwort an das Postfach — das normale Passwort funktioniert nicht. Das ist kein Fehler der Anwendung.</p>
+    <ul style="margin-bottom:0;">
+      <li>Zwei-Faktor-Anmeldung im Google-Konto muss aktiv sein</li>
+      <li><a href="https://myaccount.google.com/apppasswords">myaccount.google.com/apppasswords</a> öffnen</li>
+      <li>Namen vergeben (zum Beispiel „Himalaya"), Passwort erzeugen, den 16-stelligen Code kopieren</li>
+      <li>Diesen Code im Assistenten als Passwort eintragen</li>
+    </ul>
+  </div>
+
+  <p>Bei allen anderen Anbietern reicht in der Regel das normale Passwort. Die Serverdaten trägt der Assistent selbst ein, sobald die Adresse steht.</p>
+
+  <h2><span class="num">04</span>Wo läuft himalaya?</h2>
+  <p>Das ist der Punkt, der diese Anwendung von anderen unterscheidet. Es gibt zwei Betriebsarten — umschaltbar über das <strong>Zahnrad</strong> neben dem Stift.</p>
+
+  <h3>Auf diesem Rechner</h3>
+  <p>himalaya liegt neben dem Programm und verwaltet die Postfächer direkt. Der Normalfall für einen einzelnen Arbeitsplatz.</p>
+  <p>Die Konten stehen in <code>%APPDATA%\himalaya\config.toml</code> (Windows) beziehungsweise <code>~/.config/himalaya/config.toml</code> (Linux).</p>
+
+  <h3>Auf einem anderen Rechner (SSH)</h3>
+  <p>Sinnvoll, wenn deine Postfächer zentral liegen — etwa auf einem Heimserver — und du von mehreren Geräten darauf zugreifen willst. <strong>Die Zugangsdaten bleiben dann an einer einzigen Stelle.</strong> Die anderen Rechner brauchen nur einen SSH-Schlüssel, kein einziges Passwort.</p>
+  <div class="card">
+    <h4 style="margin:0 0 10px;font-size:15px;">Einrichten</h4>
+    <ul style="margin-bottom:0;">
+      <li><strong>1.</strong> Auf dem Zielrechner muss ein SSH-Server laufen</li>
+      <li><strong>2.</strong> Zahnrad öffnen → <strong>Auf einem anderen Rechner (SSH)</strong> wählen</li>
+      <li><strong>3.</strong> Ziel eintragen, zum Beispiel <code>benutzer@192.168.1.50</code></li>
+      <li><strong>4.</strong> himalaya-Pfad leer lassen — die Anwendung sucht das Programm selbst (<code>command -v</code>, <code>~/.local/bin</code>, <code>~/.cargo/bin</code>, <code>/usr/local/bin</code>)</li>
+      <li><strong>5.</strong> <strong>Speichern und prüfen</strong> — die Antwort zeigt sofort, wie viele Konten gefunden wurden</li>
+    </ul>
+  </div>
+  <p class="note">
+    Warum nicht einfach die <code>config.toml</code> kopieren? Weil darin die Postfach-Passwörter im Klartext stehen. Wer sie auf fünf Rechner verteilt, hat sie an fünf Stellen liegen. Über SSH bleibt es bei einer.
+  </p>
+
+  <h3>Schlüssel statt Passwort</h3>
+  <p>Damit die Verbindung ohne Eingabe klappt, braucht der Zielrechner deinen öffentlichen Schlüssel:</p>
+  <pre><code>ssh-keygen -t ed25519                  # nur, wenn noch keiner existiert
+ssh-copy-id benutzer@zielrechner</code></pre>
+  <p>Beim ersten Verbinden fragt die Anwendung einmal nach der Bestätigung des Host-Schlüssels. Ändert sich der Schlüssel später, verweigert sie die Verbindung — das ist Absicht und schützt vor Zwischenschaltern.</p>
+
+  <h2><span class="num">05</span>Im Bild</h2>
+  <div class="shots">
+    <img src="himalaya-shot.png" alt="Kontenliste und Nachrichtenansicht">
+  </div>
+
+  <h2><span class="num">06</span>Versionslog</h2>
+
+  <div class="version">
+    <div class="vhead"><span class="vnum">0.1.0</span><span class="vdate">Oktober 2026</span><span class="badge gold">Erste Fassung</span></div>
+    <ul>
+      <li>Oberfläche für beliebig viele himalaya-Konten mit Ordnerbaum je Konto</li>
+      <li>Konto-Assistent mit Anbieter-Erkennung — Serverdaten werden automatisch ergänzt</li>
+      <li>Nachrichten lesen, antworten, als gelesen markieren, löschen, weiterleiten</li>
+      <li>Signatur-Editor mit mehreren Signaturen je Konto und frei benennbaren Gruppen</li>
+      <li>Suche im gewählten Konto, deutsche Ordnernamen</li>
+      <li>Echte Absenderadresse in der Liste statt nur des Anzeigenamens</li>
+      <li><strong>Verbindungs-Zahnrad:</strong> himalaya lokal oder auf einem anderen Rechner per SSH betreiben</li>
+      <li>Windows-Fassung als Installer mit Startmenü, Deinstallation und mitgeliefertem himalaya</li>
+      <li>Linux-Paket mit Anwendungsmenü-Eintrag und Hintergrunddienst im Browser</li>
+      <li>Goldenes Markenzeichen in allen Größen, auch in Fensterleiste und Taskleiste</li>
+      <li>Einstellungen liegen unter <code>%APPDATA%</code> beziehungsweise <code>~/.config</code> — nicht im Cache, wo sie beim Aufräumen verschwinden</li>
+    </ul>
+  </div>
+
+  <h2><span class="num">07</span>Technisches</h2>
+  <table>
+    <tr><th>Punkt</th><th>Details</th></tr>
+    <tr><td>Basis</td><td>himalaya (Rust), aufgerufen über seine JSON-Schnittstelle</td></tr>
+    <tr><td>Oberfläche</td><td>Web-Technik im eigenen Fenster (WebView2 unter Windows, WebKit unter Linux)</td></tr>
+    <tr><td>Python</td><td>Nicht nötig — im Windows-Programm enthalten</td></tr>
+    <tr><td>Netzwerk</td><td>Nur <code>127.0.0.1</code>. Die Oberfläche ist von außen nicht erreichbar — bewusst, sie hat keine eigene Anmeldung</td></tr>
+    <tr><td>Speicherort</td><td>Windows: <code>%APPDATA%\smartys-himalaya-gui</code> · Linux: <code>~/.config/smartys-himalaya-gui</code></td></tr>
+    <tr><td>Lizenz</td><td>MIT — Quelltext offen, kommerzielle Nutzung erlaubt</td></tr>
+    <tr><td>Quelltext</td><td><a href="https://github.com/smartonaut/smartys-himalaya-gui">github.com/smartonaut/smartys-himalaya-gui</a></td></tr>
+  </table>
+
+  <div class="card gold" style="margin-top:34px;">
+    <h3 style="margin-top:0;">Mithilfe willkommen</h3>
+    <p style="margin-bottom:12px;">Fehler gefunden, Anbieter der noch fehlt, ein Wunsch? Das Forum ist der schnellste Weg — dort landet es direkt bei mir.</p>
+    <a class="btn gold" href="https://forum.smartys.tech">Ins Forum</a>
+  </div>
+
+</div>
+
+<footer>
+  <div class="wrap">
+    <p>© 2026 Smartys · <a href="/">Alle Apps</a> · <a href="/impressum.html">Impressum</a> · <a href="/datenschutz.html">Datenschutz</a> · <a href="/agb.html">AGB</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

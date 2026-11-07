@@ -28,6 +28,7 @@ object SecCrypto {
         val cipherServerUrl: String,
         val cipherUsername: String,
         val cipherPassword: String,
+        val cipherEpgUrl: String = "",
     )
 
     fun deriveKey(password: String, saltB64: String, iterations: Int): ByteArray {
