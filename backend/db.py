@@ -83,7 +83,7 @@ def conn() -> sqlite3.Connection:
 def normalize_mac(mac: str) -> str:
     """Normalisiert eine Player-ID/MAC auf das kanonische Format
     AA:BB:CC:DD:EE:FF (uppercase, mit Doppelpunkten).
-    "32:38:6A:63:74:A0" und "32386A6374A0" werden zum selben Key."""
+    "aa:bb:cc:dd:ee:ff" und "AABBCCDDEEFF" werden zum selben Key."""
     if not mac:
         return mac
     hexchars = "0123456789ABCDEF"
