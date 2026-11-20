@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Smartys Player 1.2.0 auf dem LG Fernseher installieren: Developer Mode einschalten, IP herausfinden, .ipk installieren, Playlist paaren — Schritt für Schritt.">
-<title>LG webOS: Smartys Player 1.2.0 installieren — Anleitung</title>
+<meta name="description" content="Smartys Player 1.2.1 auf dem LG Fernseher installieren: Developer Mode einschalten, IP herausfinden, .ipk installieren, Playlist paaren — Schritt für Schritt.">
+<title>LG webOS: Smartys Player 1.2.1 installieren — Anleitung</title>
 <link rel="canonical" href="https://player.smartys.tech/webos-install.html">
 <meta property="og:type" content="article">
-<meta property="og:title" content="LG webOS: Smartys Player 1.2.0 installieren">
+<meta property="og:title" content="LG webOS: Smartys Player 1.2.1 installieren">
 <meta property="og:description" content="Developer Mode einschalten, IP herausfinden, .ipk installieren, Playlist paaren — Schritt für Schritt.">
 <meta property="og:url" content="https://player.smartys.tech/webos-install.html">
 <meta property="og:image" content="https://player.smartys.tech/logo.png">
@@ -63,8 +63,8 @@
 
 <article><div class="wrap">
   <div class="kicker">Anleitung · LG webOS</div>
-  <h1>Smartys Player 1.2.0 auf dem LG Fernseher installieren</h1>
-  <div class="meta">Gilt für webOS 22 und neuer · Paket: com.smartys.iptv_1.2.0_all.ipk · 404 KB</div>
+  <h1>Smartys Player 1.2.1 auf dem LG Fernseher installieren</h1>
+  <div class="meta">Gilt für webOS 22 und neuer · Paket: com.smartys.iptv_1.2.1_all.ipk · 404 KB</div>
 
   <div class="note"><p><strong>Warum überhaupt Developer Mode?</strong> LG lässt Apps nur aus dem eigenen Store zu.
   Um eine eigene App zu installieren, muss der Fernseher in den Developer Mode. Solange der Dev Mode
@@ -88,13 +88,13 @@
   <div class="step"><span class="num">4</span><h3>Paket installieren</h3>
   <p><strong>Weg A — über die Developer-Mode-App:</strong> App am TV öffnen, „Web Server" bzw. „Upload"
   wählen, die angezeigte Adresse am Computer im Browser öffnen und
-  <code>com.smartys.iptv_1.2.0_all.ipk</code> hochladen. Die App installiert sich selbst.</p>
+  <code>com.smartys.iptv_1.2.1_all.ipk</code> hochladen. Die App installiert sich selbst.</p>
   <p><strong>Weg B — über USB:</strong> die <code>.ipk</code> auf einen FAT32/NTFS-Stick kopieren (nicht entpacken),
   Stick in den TV, Developer-Mode-App → „Install from USB".</p>
   <p><strong>Weg C — über das Netz (nur wenn ares-cli vorhanden ist):</strong></p>
   <ol>
     <li>Einmalig anmelden: <code>npx ares-setup-device -a &lt;TV-IP&gt; -p "&lt;Passcode&gt;"</code></li>
-    <li>Installieren: <code>npx ares-install --device &lt;TV-IP&gt; com.smartys.iptv_1.2.0_all.ipk</code></li>
+    <li>Installieren: <code>npx ares-install --device &lt;TV-IP&gt; com.smartys.iptv_1.2.1_all.ipk</code></li>
   </ol></div>
 
   <div class="step"><span class="num">5</span><h3>App einrichten (Pairing)</h3>
@@ -110,7 +110,7 @@
 
   <h2>Nachsehen, welche Version läuft</h2>
   <p>In der App: <strong>Zahnrad → Über</strong>. Dort steht zum Beispiel
-  „Smartys Player 1.2.0 (webOS)". Direkt darunter zeigt die App, ob der Stillstands-Wächter aktiv ist und
+  „Smartys Player 1.2.1 (webOS)". Direkt darunter zeigt die App, ob der Stillstands-Wächter aktiv ist und
   wie oft er schon neu verbunden hat.</p>
 
   <h2>Wenn der Ton fehlt oder das Bild stehen bleibt</h2>
@@ -124,7 +124,7 @@
   </ul>
 
   <div class="cta-row">
-    <a class="btn gold" href="https://github.com/smartonaut/smartys-iptv-webos/releases/download/v1.2.0/com.smartys.iptv_1.2.0_all.ipk">webOS 1.2.0 herunterladen (.ipk)</a>
+    <a class="btn gold" href="https://github.com/smartonaut/smartys-iptv-webos/releases/download/v1.2.1/com.smartys.iptv_1.2.1_all.ipk">webOS 1.2.1 herunterladen (.ipk)</a>
     <a class="btn ghost" href="/blog/webos-1-2-0.html">Was in 1.2.0 neu ist</a>
   </div>
 </div></article>

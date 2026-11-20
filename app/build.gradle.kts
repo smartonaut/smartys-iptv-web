@@ -28,8 +28,8 @@ android {
         create("tv") {
             dimension = "target"
             applicationId = "com.smartys.iptv"
-            versionCode = 60
-            versionName = "0.8.41"
+            versionCode = 61
+            versionName = "0.8.42"
             buildConfigField("boolean", "USE_KEYSTORE_STORE", "false")
             buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "true")
             buildConfigField("boolean", "LITE_DEVICE", "false")
