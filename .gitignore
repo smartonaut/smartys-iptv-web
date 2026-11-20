@@ -34,3 +34,6 @@ __pycache__/
 
 # ---------- Quellen-Backups (lokale tgz-Snapshots, nie einchecken) ----------
 backups/
+
+# Interne Notizen/Pläne gehören nicht ins öffentliche Repo
+.hermes/
