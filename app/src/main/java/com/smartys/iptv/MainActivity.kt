@@ -287,13 +287,8 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
         onDispose { player.value?.release() }
     }
 
-    // VOD + Serien nach erfolgreichem Login laden
-    LaunchedEffect(vm.state) {
-        if (vm.state is AppState.Ready) {
-            vm.loadVod()
-            vm.loadSeries()
-        }
-    }
+    // VOD + Serien werden in loadContent() angestossen (nach AppState.Ready).
+    // Der fruehere Aufruf hier lief doppelt, sobald beide Pfade griffen.
 
     val play: (LiveStream) -> Unit = { channel ->
         val url = vm.streamUrlFor(channel)
@@ -482,7 +477,12 @@ fun App(vm: MainViewModel = viewModel(), autoUrl: String? = null, autoUser: Stri
                                 "movies" -> MovieGrid(
                                     vm = vm, categories = vm.vodCategories, movies = vm.vodMovies,
                                     selectedCategory = movieCat.value,
-                                    onSelectCategory = { movieCat.value = it },
+                                    onSelectCategory = {
+                                        movieCat.value = it
+                                        // Filme erst beim Oeffnen der Gruppe holen.
+                                        // Alle 38.502 auf einmal sprengen den 192-MB-Heap.
+                                        if (it != null) vm.loadVodCategory(it)
+                                    },
                                     onOpen = { lastMovieId.value = it.streamId; openMovie.value = it },
                                     focusRestoreId = if (openMovie.value == null) lastMovieId.value else null,
                                     onBack = { mainTab = "live" },
@@ -679,8 +679,22 @@ fun VodPlayerScreen(
                         if (nextPending) { onAdvanceNow(); true }
                         else false
                     }
-                    Key.DirectionLeft, Key.MediaRewind -> { if (!nextPending) seek(-10_000L); true }
-                    Key.DirectionRight, Key.MediaFastForward -> { if (!nextPending) seek(10_000L); true }
+                    // Links/Rechts = Lautstaerke (wie im Live-Player). Die alten
+                    // Fire-TV-Fernbedienungen haben keine eigenen Volume-Tasten.
+                    // Gespult wird mit den dedizierten Media-Tasten der FB.
+                    Key.DirectionLeft, Key.DirectionRight -> {
+                        val cur = player?.volume ?: 1f
+                        val next = if (keyEvent.key == Key.DirectionRight)
+                            (cur + 0.05f).coerceAtMost(1f)
+                        else (cur - 0.05f).coerceAtLeast(0f)
+                        player?.volume = next
+                        PlayPrefs.setVolume(ctx, next)
+                        osdMsg = "🔊 ${(next * 100).toInt()}%"
+                        showOsd = true
+                        true
+                    }
+                    Key.MediaRewind -> { if (!nextPending) seek(-10_000L); true }
+                    Key.MediaFastForward -> { if (!nextPending) seek(10_000L); true }
                     Key.MediaPlayPause -> {
                         if (!nextPending) {
                             val exo = player
@@ -1833,6 +1847,19 @@ fun ChannelGrid(
         if (focusListTick > 0) {
             kotlinx.coroutines.delay(80)
             runCatching { firstRowFocus.requestFocus() }
+        }
+    }
+
+    // Beim ersten Befuellen der Liste den Fokus nach oben links setzen.
+    // Ohne das traegt Compose den Fokus irgendwo mitten in das Grid, sobald die
+    // Kanaele eintreffen — der erste Kanal hat zwar den FocusRequester, aber
+    // niemand fordert ihn an.
+    var didInitialFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(shown.isNotEmpty()) {
+        if (!didInitialFocus && shown.isNotEmpty()) {
+            kotlinx.coroutines.delay(120)
+            runCatching { firstRowFocus.requestFocus() }
+            didInitialFocus = true
         }
     }
 

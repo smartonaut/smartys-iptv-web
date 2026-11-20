@@ -54,8 +54,8 @@ android {
         create("lite") {
             dimension = "target"
             applicationId = "com.smartys.iptv.lite"
-            versionCode = 8
-            versionName = "0.1.8"
+            versionCode = 19
+            versionName = "0.1.19"
             buildConfigField("boolean", "USE_KEYSTORE_STORE", "false")
             buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "true")
             buildConfigField("boolean", "LITE_DEVICE", "true")

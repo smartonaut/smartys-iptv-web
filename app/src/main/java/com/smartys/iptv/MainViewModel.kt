@@ -54,46 +54,90 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var vodLoading by mutableStateOf(false)
         private set
+    var vodCatLoading by mutableStateOf(false)
+        private set
     var vodError by mutableStateOf<String?>(null)
         private set
 
-    /** Lädt VOD-Kategorien + Filme (einmalig, nach Login). */
+    /** Lädt NUR die VOD-Kategorien. Die Filme kommen erst beim Öffnen einer
+     *  Gruppe (loadVodCategory) — siehe dort. */
     fun loadVod() {
-        val c = creds ?: return
-        val a = api ?: return
-        if (vodLoading) return
+        val c = creds ?: run { android.util.Log.d("SmartysIPTV", "loadVod: KEINE creds"); return }
+        val a = api ?: run { android.util.Log.d("SmartysIPTV", "loadVod: KEINE api"); return }
+        if (vodLoading) { android.util.Log.d("SmartysIPTV", "loadVod: laeuft schon"); return }
+        android.util.Log.d("SmartysIPTV", "loadVod: START")
         vodLoading = true; vodError = null
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val cats = withTimeout(30000) { a.vodCategories(c.user, c.pass) }
-                val movies = withTimeout(60000) { a.vodStreams(c.user, c.pass) }
-                val catNames = cats.associate { it.id to it.name }
-                movies.forEach { it.categoryName = catNames[it.categoryId] ?: "" }
-                withContextMain {
-                    vodCategories = cats
-                    vodMovies = movies
-                }
+                val cats = withTimeout(60000) { a.vodCategories(c.user, c.pass) }
+                android.util.Log.d("SmartysIPTV", "loadVod: Kategorien=${cats.size}")
+                // Ausgeblendete Gruppen werden gar nicht erst angeboten.
+                val hidden = CategoryPrefs.hiddenIds("movies")
+                val catsClean = cats.filter { it.id !in hidden }
+                withContextMain { vodCategories = catsClean }
             } catch (e: Exception) {
-                withContextMain { vodError = "VOD laden fehlgeschlagen: ${e.message}" }
+                android.util.Log.w("SmartysIPTV", "loadVod: FEHLER", e)
+                withContextMain { vodError = "Film-Gruppen laden fehlgeschlagen: ${e.message}" }
             } finally {
                 withContextMain { vodLoading = false }
             }
         }
     }
 
-    /** Lädt Serien-Kategorien + Serien (einmalig, nach Login). */
-    fun loadSeries() {
+    /**
+     * Lädt die Filme EINER Gruppe.
+     *
+     * WARUM kategorieweise: Die Line hat 38.502 Filme (15,8 MB JSON). Der Stick
+     * hat 192 MB Heap und lief beim Versuch, alle auf einmal zu halten,
+     * dauerhaft auf 192/192 MB (0 % frei) — der Lader brach mit
+     * TimeoutCancellationException ab, waehrend Serien (9.413) durchliefen.
+     * Eine einzelne Gruppe sind wenige hundert Einträge, die passen sicher.
+     */
+    fun loadVodCategory(catId: String) {
         val c = creds ?: return
         val a = api ?: return
+        if (vodLoading || vodCatLoading) return
+        vodCatLoading = true; vodError = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val movies = withTimeout(120000) {
+                    a.vodStreams(c.user, c.pass, categoryId = catId)
+                }
+                val catName = vodCategories.firstOrNull { it.id == catId }?.name ?: ""
+                movies.forEach { it.categoryName = catName }
+                android.util.Log.d("SmartysIPTV", "loadVodCategory($catId): ${movies.size} Filme")
+                withContextMain { vodMovies = movies }
+            } catch (e: Exception) {
+                android.util.Log.w("SmartysIPTV", "loadVodCategory: FEHLER", e)
+                withContextMain {
+                    vodError = "Filme dieser Gruppe laden fehlgeschlagen: ${e.message}"
+                }
+            } finally {
+                withContextMain { vodCatLoading = false }
+            }
+        }
+    }
+
+    /** Lädt Serien-Kategorien + Serien (einmalig, nach Login). */
+    fun loadSeries() {
+        val c = creds ?: run { android.util.Log.d("SmartysIPTV", "loadSeries: KEINE creds"); return }
+        val a = api ?: run { android.util.Log.d("SmartysIPTV", "loadSeries: KEINE api"); return }
+        android.util.Log.d("SmartysIPTV", "loadSeries: START")
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val cats = withTimeout(30000) { a.seriesCategories(c.user, c.pass) }
-                val shows = withTimeout(60000) { a.seriesStreams(c.user, c.pass) }
+                android.util.Log.d("SmartysIPTV", "loadSeries: Kategorien=${cats.size}")
+                val shows = withTimeout(180000) { a.seriesStreams(c.user, c.pass) }
+                android.util.Log.d("SmartysIPTV", "loadSeries: Serien=${shows.size}")
                 val catNames = cats.associate { it.id to it.name }
-                shows.forEach { it.categoryName = catNames[it.categoryId] ?: "" }
+                // Ausgeblendete Gruppen gar nicht erst in den Zustand uebernehmen.
+                val hidden = CategoryPrefs.hiddenIds("series")
+                val showsClean = shows.filter { it.categoryId !in hidden }
+                showsClean.forEach { it.categoryName = catNames[it.categoryId] ?: "" }
+                android.util.Log.d("SmartysIPTV", "loadSeries: sichtbar=${showsClean.size} (ausgeblendet ${shows.size - showsClean.size})")
                 withContextMain {
-                    seriesCategories = cats
-                    seriesShows = shows
+                    seriesCategories = cats.filter { it.id !in hidden }
+                    seriesShows = showsClean
                 }
             } catch (e: Exception) {
                 android.util.Log.d("SmartysIPTV", "Serien laden fehlgeschlagen: ${e.message}")
@@ -361,6 +405,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun restoreSession() {
         val providers = CredStore.loadAll(getApplication())
+        android.util.Log.w("SmartysIPTV", "restoreSession: ${providers.size} Lines gespeichert")
         if (providers.isEmpty()) {
             state = AppState.NeedsLogin
             return
@@ -447,6 +492,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun loadContent() {
+        android.util.Log.w("SmartysIPTV", "loadContent: START, providers=${allProviders.size}")
         state = AppState.Loading
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -471,11 +517,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
 
                 // Marker/Fake-Einträge rausfiltern (z.B. "##### DE ALLGEMEINES #####")
-                val clean = all.filter { !it.name.contains("####") }
+                // und ausgeblendete Gruppen gar nicht erst in den Zustand uebernehmen:
+                // was der Nutzer ausgeblendet hat, soll auch nicht im Speicher liegen.
+                val hiddenLive = CategoryPrefs.hiddenIds("live")
+                val clean = all.filter { !it.name.contains("####") && it.categoryId !in hiddenLive }
+                val catsClean = allCats.filter { it.id !in hiddenLive }
                 channelsCache = clean
                 withContextMain {
-                    state = AppState.Ready(allCats, clean)
+                    state = AppState.Ready(catsClean, clean)
                 }
+                // VOD und Serien HIER anstossen, nicht in der UI.
+                // Startet die App direkt im Player (oder wird der Haupt-Screen
+                // nie komponiert), lief der LaunchedEffect dort nie — Filme und
+                // Serien blieben leer, ohne jede Meldung.
+                loadVod()
+                loadSeries()
                 // XMLTV-EPG des (ersten) Providers laden
                 loadXmltvEpg()
             } catch (e: Exception) {

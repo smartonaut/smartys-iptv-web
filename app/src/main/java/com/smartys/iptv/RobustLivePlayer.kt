@@ -117,8 +117,13 @@ class RobustLivePlayer(private val ctx: Context) {
                 .setBufferDurationsMs(
                     minBufferMs,
                     maxBufferMs,
-                    bufferDurations[2],
-                    bufferDurations[3]
+                    // Kleinste Nutzer-Puffer (z. B. 3 s) dürfen die beiden
+                    // Wiedergabe-Schwellen nicht unterschreiten: ExoPlayer wirft
+                    // sonst "IllegalArgumentException: minBufferMs cannot be less
+                    // than bufferForPlaybackAfterRebufferMs" und die App stürzt
+                    // schon beim Start ab (Bildschirm bleibt schwarz).
+                    minOf(bufferDurations[2], minBufferMs),
+                    minOf(bufferDurations[3], minBufferMs)
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
                 .build()

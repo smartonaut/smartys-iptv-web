@@ -38,6 +38,39 @@ object PlayerIdentity {
         return b.joinToString(":") { String.format("%02X", (it.toInt() and 0xFF)) }
     }
 
+    /** Alphabet ohne verwechselbare Zeichen (kein O/0, I/l/1). */
+    private const val PW_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+
+    /**
+     * Pairing-Passwort deterministisch aus demselben Geräte-Seed wie die
+     * Player-ID.
+     *
+     * WARUM: Das Passwort wurde bisher gewürfelt und nur lokal gespeichert.
+     * Nach einer Neuinstallation erzeugte das Gerät ein NEUES Passwort, das
+     * Panel kannte nur das alte — das Pairing lief auf 401 und die App zeigte
+     * "Noch keine Playlist hinterlegt". Der Nutzer musste das Panel-Passwort
+     * von Hand nachziehen. Da die Player-ID bereits deterministisch ist und
+     * über eine Neuinstallation hinweg gleich bleibt, muss das Passwort
+     * dasselbe Verhalten zeigen.
+     *
+     * Ableitung: SHA-256 über "<namespace>|<seed>", die ersten 12 Bytes
+     * abgebildet auf [PW_CHARS]. Byte wird als SIGNED interpretiert und per
+     * floorMod auf den Wertebereich gebracht — dadurch ist das Ergebnis
+     * plattformunabhängig reproduzierbar (Kotlin/JVM wie Testskript).
+     */
+    fun derivePairingPw(seed: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest((PW_NAMESPACE + "|" + seed).toByteArray(Charsets.UTF_8))
+        val sb = StringBuilder(12)
+        for (i in 0 until 12) {
+            sb.append(PW_CHARS[Math.floorMod(digest[i].toInt(), PW_CHARS.length)])
+        }
+        return sb.toString()
+    }
+
+    /** Vertragsbestandteil — Änderung ändert ALLE abgeleiteten Passwörter. */
+    private const val PW_NAMESPACE = "smartys-iptv-pairing-v1"
+
     /**
      * Seed aus gerätestabilen Merkmalen (Android/TV), feste Reihenfolge:
      * android_id + manufacturer + model.

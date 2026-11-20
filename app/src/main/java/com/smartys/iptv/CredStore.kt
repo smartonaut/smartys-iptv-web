@@ -113,13 +113,25 @@ object CredStore {
     fun pairingPw(ctx: Context): String {
         val p = prefs(ctx)
         getSecure(p, K_PAIRING_PW)?.let { return it }
-        val CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
-        val rnd = java.security.SecureRandom()
-        val sb = StringBuilder(12)
-        val buf = ByteArray(12)
-        rnd.nextBytes(buf)
-        for (b in buf) sb.append(CHARS[Math.floorMod(b.toInt(), CHARS.length)])
-        val pw = sb.toString()
+        // Deterministisch aus demselben Geraete-Seed wie die Player-ID.
+        // Vorher wurde hier gewuerfelt und nur lokal gespeichert: nach einer
+        // Neuinstallation kam ein NEUES Passwort heraus, das Panel kannte nur
+        // das alte -> Pairing 401 -> App zeigte "Noch keine Playlist hinterlegt".
+        // Jetzt ueberlebt das Passwort die Neuinstallation wie die Player-ID.
+        val seed = PlayerIdentity.deviceSeed(ctx)
+        val pw = if (seed.isNotEmpty()) {
+            PlayerIdentity.derivePairingPw(seed)
+        } else {
+            // Keine lesbaren Geraetemerkmale: zwangslaeufig wuerfeln
+            // (dann NICHT reinstall-stabil, wie bei der Player-ID).
+            val CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+            val rnd = java.security.SecureRandom()
+            val sb = StringBuilder(12)
+            val buf = ByteArray(12)
+            rnd.nextBytes(buf)
+            for (b in buf) sb.append(CHARS[Math.floorMod(b.toInt(), CHARS.length)])
+            sb.toString()
+        }
         // commit() wie bei der Player-ID: Pairing-Passwort darf niemals durch
         // einen verlorenen async-Write "neu generiert" werden.
         putSecure(p, K_PAIRING_PW, pw)

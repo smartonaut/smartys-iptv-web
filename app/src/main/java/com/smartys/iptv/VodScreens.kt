@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -73,6 +74,11 @@ fun MovieGrid(
 
     val compact = LocalConfiguration.current.screenWidthDp < 1000
     var catMenuRefresh by remember { mutableStateOf(0) }
+    // Fokus-Zeile nachfuehren: beim Wechsel in eine neue Zeile soll die Liste so
+    // scrollen, dass die GANZE Zeile (Cover + Titel) sichtbar ist. Ohne das
+    // scrollt Compose nur das Minimum und man sieht die Titel der Zeile darueber
+    // plus angeschnittene Cover der aktuellen.
+    var focusedIdx by remember { mutableStateOf(-1) }
     val shown = remember(movies, selectedCategory, searchQuery, catMenuRefresh) {
         var list = movies
         if (selectedCategory != null) list = list.filter { it.categoryId == selectedCategory }
@@ -86,6 +92,33 @@ fun MovieGrid(
 
     // Ruecksprung aus der Detailseite: zum zuletzt geoeffneten Film scrollen + fokussieren
     val restoreIdx = shown.indexOfFirst { it.streamId == focusRestoreId }
+
+    // Zeile nachfuehren: ist die fokussierte Karte nicht komplett im Blick
+    // (unten abgeschnitten), dann die GESAMTE Zeile an den oberen Rand holen.
+    // Sonst zeigt der Stick die Titel der Zeile darueber plus halbe Cover.
+    //
+    // WICHTIG: nur beim WECHSEL der Zeile scrollen. Innerhalb einer Zeile
+    // (links/rechts durch die 4 Cover) darf nichts passieren — sonst wird bei
+    // jedem Schritt erneut animiert und das Bild huepft hoch und runter.
+    var lastRowTop by remember { mutableStateOf(-1) }
+    LaunchedEffect(focusedIdx, shown.size) {
+        if (focusedIdx < 0) return@LaunchedEffect
+        val info = gridState.layoutInfo
+        val item = info.visibleItemsInfo.firstOrNull { it.index == focusedIdx }
+            ?: return@LaunchedEffect
+        val top = item.offset.y
+        // Zeilenanfang = kleinster Index mit derselben y-Position
+        val rowTop = info.visibleItemsInfo
+            .filter { it.offset.y == top }
+            .minOfOrNull { it.index } ?: focusedIdx
+        if (rowTop == lastRowTop) return@LaunchedEffect
+        lastRowTop = rowTop
+        // Bedingungslos: bei jedem Zeilenwechsel steht die Zeile danach oben.
+        // Vorher hing das an "ist die Karte abgeschnitten?" — bei Cover 1 war sie
+        // knapp sichtbar, also wurde nicht gescrollt; sobald Compose bei Cover 2
+        // nachschob, kamen die Titel der Zeile darueber herein.
+        runCatching { gridState.animateScrollToItem(rowTop) }
+    }
     val firstCatFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     // NUR beim Einstieg/Ruecksprung laufen, nicht bei jeder Aenderung der Liste:
     // vorher stand shown.size im Key — dann hat jeder getippte Buchstabe im Suchfeld
@@ -112,7 +145,14 @@ fun MovieGrid(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 32.dp, vertical = 20.dp)) {
             Column(Modifier.weight(1f)) {
                 Text("Filme", color = Color(0xFFE8EEFC), fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text("${shown.size} Filme", color = Color(0xFF6B7A99), fontSize = 12.sp)
+                Text(
+                    when {
+                        vm.vodCatLoading -> "Lade Filme dieser Gruppe…"
+                        selectedCategory == null -> "Gruppe wählen — Filme werden dann geladen"
+                        else -> "${shown.size} Filme"
+                    },
+                    color = Color(0xFF6B7A99), fontSize = 12.sp
+                )
             }
             if (searchArmed) {
                 OutlinedTextField(
@@ -163,7 +203,11 @@ fun MovieGrid(
             Row(Modifier.fillMaxSize()) {
                 // Kategorien-Sidebar (sortierbar/ausblendbar via Lang-OK)
                 var catMenuFor by remember { mutableStateOf<Category?>(null) }
-                val orderedCats = remember(categories, catMenuFor) {
+                // catMenuRefresh MUSS im Key stehen: beim Verschieben aendert sich
+                // nur CategoryPrefs, categories und catMenuFor bleiben gleich —
+                // ohne den Zaehler liefert remember die alte Reihenfolge aus dem
+                // Cache und im Menue passiert sichtbar nichts.
+                val orderedCats = remember(categories, catMenuFor, catMenuRefresh) {
                     CategoryPrefs.applyTo("movies", categories)
                 }
                 LazyColumn(Modifier.width(if (compact) 240.dp else 300.dp).fillMaxHeight().background(Color(0xFF11172A)).padding(vertical = 14.dp)) {
@@ -188,7 +232,20 @@ fun MovieGrid(
                     )
                 }
                 // Poster-Grid
-                LazyVerticalGrid(
+                if (shown.isEmpty()) {
+                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                        Text(
+                            when {
+                                vm.vodCatLoading -> "Lade Filme dieser Gruppe…"
+                                vm.vodError != null -> "Fehler: ${vm.vodError}"
+                                selectedCategory == null -> "Wähle links eine Gruppe — die Filme werden dann geladen."
+                                else -> "Keine Filme in dieser Gruppe."
+                            },
+                            color = if (vm.vodError != null) Color(0xFFE07070) else Color(0xFF8FA3C8),
+                            fontSize = 15.sp
+                        )
+                    }
+                } else LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 160.dp),
                     state = gridState,
                     contentPadding = PaddingValues(24.dp),
@@ -196,12 +253,13 @@ fun MovieGrid(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    items(shown, key = { it.streamId }) { movie ->
+                    itemsIndexed(shown, key = { _, m -> m.streamId }) { myIdx, movie ->
                         val isRestore = movie.streamId == focusRestoreId
                         MovieCard(
                             movie = movie,
                             onClick = { onOpen(movie) },
-                            focusRequester = if (isRestore) restoreFocus else null
+                            focusRequester = if (isRestore) restoreFocus else null,
+                            onFocus = { focusedIdx = myIdx }
                         )
                     }
                 }
@@ -211,7 +269,12 @@ fun MovieGrid(
 }
 
 @Composable
-fun MovieCard(movie: VodStream, onClick: () -> Unit, focusRequester: FocusRequester? = null) {
+fun MovieCard(
+    movie: VodStream,
+    onClick: () -> Unit,
+    focusRequester: FocusRequester? = null,
+    onFocus: (() -> Unit)? = null
+) {
     var focused by remember { mutableStateOf(false) }
     // TMDb-Poster-Fallback: kein stream_icon, aber tmdb-Id vorhanden -> Cover nachladen.
     var tmdbPoster by remember(movie) { mutableStateOf<String?>(null) }
@@ -224,7 +287,10 @@ fun MovieCard(movie: VodStream, onClick: () -> Unit, focusRequester: FocusReques
     Column(
         Modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus?.invoke()
+            }
             .clickable(onClick = onClick)
     ) {
         // Poster: goldener Rahmen NUR bei Fokus (eckig, wie im Menü)
@@ -395,7 +461,7 @@ fun SeriesGrid(
         }
         Row(Modifier.fillMaxSize()) {
             var catMenuFor by remember { mutableStateOf<Category?>(null) }
-            val orderedCats = remember(categories, catMenuFor) {
+            val orderedCats = remember(categories, catMenuFor, catMenuRefresh) {
                 CategoryPrefs.applyTo("series", categories)
             }
             LazyColumn(Modifier.width(if (compact) 240.dp else 300.dp).fillMaxHeight().background(Color(0xFF11172A)).padding(vertical = 14.dp)) {
@@ -690,6 +756,75 @@ fun movieYear(movie: VodStream): String {
     return cal.get(java.util.Calendar.YEAR).toString()
 }
 
+/**
+ * Button im Film-/Serien-Detail.
+ *
+ * Der Fokus war praktisch unsichtbar, weil alle Buttons dauerhaft einen goldenen
+ * 1dp-Rahmen hatten — man konnte nicht erkennen, wo man gerade steht. Hier:
+ *   - ohne Fokus: dezenter Rahmen
+ *   - mit Fokus:  3dp goldener Rahmen + hellerer Hintergrund
+ *   - disabled:   gedämpft, nicht fokussierbar
+ */
+@Composable
+fun DetailButton(
+    text: String,
+    onClick: () -> Unit,
+    primary: Boolean = false,
+    enabled: Boolean = true,
+    subtitle: String? = null,
+    focusRequester: FocusRequester? = null
+) {
+    var focused by remember { mutableStateOf(false) }
+    val bg = when {
+        !enabled -> Color(0xFF1A1F2E)
+        primary -> if (focused) Color(0xFFFFD97A) else Color(0xFFFFC94D)
+        focused -> Color(0xFF2A3450)
+        else -> Color(0xFF141A2A)
+    }
+    val fg = when {
+        !enabled -> Color(0xFF5A6478)
+        primary -> Color(0xFF0B0E14)
+        focused -> Color(0xFFFFD97A)
+        else -> Color(0xFFE8EEFC)
+    }
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(12.dp),
+        color = bg,
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (focused && enabled) 3.dp else 1.dp,
+            color = when {
+                !enabled -> Color(0xFF2A3245)
+                focused -> Color(0xFFFFD97A)
+                primary -> Color(0xFFFFC94D)
+                else -> Color(0xFF3A4666)
+            }
+        ),
+        modifier = Modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+    ) {
+        Column(
+            Modifier.padding(horizontal = 28.dp, vertical = 13.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(text, color = fg, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            subtitle?.let {
+                Text(it, color = if (!enabled) Color(0xFF4A5468) else Color(0xFF8FA3C8), fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+/** Liegt ein echtes externes Speichermedium (USB/SD) vor? Interner Speicher zaehlt NICHT. */
+fun hasExternalStorage(ctx: android.content.Context): Boolean {
+    return runCatching {
+        val dirs = ctx.getExternalFilesDirs(null)
+        dirs.size > 1 && dirs[1] != null
+    }.getOrDefault(false)
+}
+
 @Composable
 fun MovieDetail(
     vm: MainViewModel,
@@ -762,69 +897,43 @@ fun MovieDetail(
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 val resumePos = remember(movie.streamId) { ResumeStore.position(ctx, "movie:${movie.streamId}") }
                 val canResume = resumePos > 30_000L  // unter 30s lohnt Fortsetzen nicht
-                Surface(
+                DetailButton(
+                    text = if (canResume) "▶ Fortsetzen" else "▶ Abspielen",
+                    subtitle = if (canResume) "bei ${resumePos / 60000} Min" else null,
+                    primary = true,
+                    focusRequester = playFocus,
                     onClick = {
-                        val c = vm.creds ?: return@Surface
+                        val c = vm.creds ?: return@DetailButton
                         onPlay(VodPlayback(c.movieUrl(movie.streamId, movie.containerExtension ?: "mp4"), movie.name, key = "movie:${movie.streamId}", startPosMs = if (canResume) resumePos else 0L))
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFFFC94D),
-                    modifier = Modifier.focusRequester(playFocus)
-                ) {
-                    Column(Modifier.padding(horizontal = 28.dp, vertical = 13.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            if (canResume) "▶ Fortsetzen" else "▶ Abspielen",
-                            color = Color(0xFF0B0E14), fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                        )
-                        if (canResume) {
-                            val mins = resumePos / 60000
-                            Text(
-                                "bei ${mins} Min",
-                                color = Color(0xFF5C3A00), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                            )
-                        }
                     }
-                }
+                )
                 if (canResume) {
                     // Zweiter Button: von vorne beginnen (löscht die gespeicherte Position)
-                    Surface(
+                    DetailButton(
+                        text = "↺ Von vorne",
                         onClick = {
-                            val c = vm.creds ?: return@Surface
+                            val c = vm.creds ?: return@DetailButton
                             ResumeStore.clear(ctx, "movie:${movie.streamId}")
                             onPlay(VodPlayback(c.movieUrl(movie.streamId, movie.containerExtension ?: "mp4"), movie.name, key = "movie:${movie.streamId}", startPosMs = 0L, fromStart = true))
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF141A2A),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
-                    ) {
-                        Text(
-                            "↺ Von vorne",
-                            color = Color(0xFFFFC94D), fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 13.dp)
-                        )
-                    }
+                        }
+                    )
                 }
                 if (movie.hasTrailer()) {
-                    Surface(
+                    DetailButton(
+                        text = "▶ Trailer",
                         onClick = {
                             // YouTube-Trailer öffnen (App oder Browser)
                             runCatching {
                                 val url = "https://www.youtube.com/watch?v=${movie.trailer}"
                                 ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
                             }
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF141A2A),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
-                    ) {
-                        Text(
-                            "▶ Trailer",
-                            color = Color(0xFFFFC94D), fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 13.dp)
-                        )
-                    }
+                        }
+                    )
                 }
                 // Download-Button: VOD lokal speichern (mit Resume-Support)
+                // Ohne echtes externes Medium (USB/SD) wird nicht auf den internen
+                // Speicher ausgewichen — der Stick ist randvoll. Button bleibt
+                // ausgegraut mit Hinweis.
                 val dl = VodDownloader.items.firstOrNull { it.id == "movie:${movie.streamId}" }
                 val dlState = when {
                     dl == null -> "idle"
@@ -833,9 +942,20 @@ fun MovieDetail(
                     dl.status == "paused" -> "paused"
                     else -> "error"
                 }
-                Surface(
+                val hasStorage = remember { hasExternalStorage(ctx) }
+                DetailButton(
+                    text = when {
+                        !hasStorage && dlState == "idle" -> "⬇ Herunterladen"
+                        dlState == "idle" -> "⬇ Herunterladen"
+                        dlState == "running" -> "⏸ ${(dl?.progress?.times(100)?.toInt() ?: 0)}%"
+                        dlState == "paused" -> "▶ Fortsetzen"
+                        dlState == "done" -> "✓ Heruntergeladen"
+                        else -> "⚠ Erneut versuchen"
+                    },
+                    subtitle = if (!hasStorage && dlState == "idle") "Kein Speichermedium vorhanden" else null,
+                    enabled = hasStorage || dlState != "idle",
                     onClick = {
-                        val c = vm.creds ?: return@Surface
+                        val c = vm.creds ?: return@DetailButton
                         val url = c.movieUrl(movie.streamId, movie.containerExtension ?: "mp4")
                         when (dlState) {
                             "idle", "error" -> VodDownloader.start(ctx, "movie:${movie.streamId}", movie.name, url, movie.containerExtension ?: "mp4")
@@ -843,28 +963,8 @@ fun MovieDetail(
                             "paused" -> VodDownloader.resume(ctx, "movie:${movie.streamId}")
                             "done" -> { /* bereits heruntergeladen */ }
                         }
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF141A2A),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3A4666))
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 28.dp, vertical = 13.dp)) {
-                        Text(
-                            when (dlState) {
-                                "idle" -> "⬇ Herunterladen"
-                                "running" -> "⏸ ${(dl?.progress?.times(100)?.toInt() ?: 0)}%"
-                                "paused" -> "▶ Fortsetzen"
-                                "done" -> "✓ Heruntergeladen"
-                                else -> "⚠ Erneut versuchen"
-                            },
-                            color = when {
-                                dlState == "done" -> Color(0xFF6FCF9F)
-                                else -> Color(0xFFE8EEFC)
-                            },
-                            fontSize = 17.sp, fontWeight = FontWeight.Bold
-                        )
                     }
-                }
+                )
             }
             Spacer(Modifier.height(20.dp))
 
@@ -1068,47 +1168,57 @@ fun CategoryMenuDialog(scope: String, cat: Category, cats: List<Category>, onDis
                     Spacer(Modifier.height(8.dp))
                     BoxWithConstraints {
                         val maxList = (maxHeight * 0.45f).coerceAtMost(400.dp)
-                        Column(
+                        // Namen EINMAL vorab holen statt pro Zeile und Frame.
+                        // labelOf() liest SharedPreferences — bei 50+ Eintraegen
+                        // und einem Tastendruck waren das 50 Dateizugriffe.
+                        val namen = remember(visible, refresh) {
+                            visible.associate { it.id to CategoryPrefs.labelOf(scope, it) }
+                        }
+                        val focusedRowId = remember { mutableStateOf<String?>(null) }
+                        // LazyColumn statt Column+verticalScroll: nur sichtbare
+                        // Zeilen werden gebaut und gehalten. Die alte Variante
+                        // hielt ALLE Zeilen gleichzeitig — auf einem 874-MB-Stick
+                        // der Grund, warum das Abwaehlen haengen blieb.
+                        LazyColumn(
                             modifier = Modifier
                                 .heightIn(max = maxList)
-                                .verticalScroll(rememberScrollState())
+                                .fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
-                        val focusedRowId = remember { mutableStateOf<String?>(null) }
-                        visible.forEach { c ->
-                            val isMarked = c.id in marked
-                            val rowF = (focusedRowId.value == c.id)
-                            Surface(
-                                onClick = { marked = if (isMarked) marked - c.id else marked + c.id },
-                                shape = RoundedCornerShape(8.dp),
-                                color = when {
-                                    rowF -> if (isMarked) Color(0xFF2A3A66) else Color(0xFF243055)
-                                    isMarked -> Color(0xFF1E2A45)
-                                    else -> Color(0xFF141A2A)
-                                },
-                                border = when {
-                                    rowF -> androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D))
-                                    isMarked -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
-                                    else -> null
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                                    .onFocusChanged {
-                                        if (it.isFocused) focusedRowId.value = c.id
-                                        else if (focusedRowId.value == c.id) focusedRowId.value = null
+                            items(visible, key = { it.id }) { c ->
+                                val isMarked = c.id in marked
+                                val rowF = (focusedRowId.value == c.id)
+                                Surface(
+                                    onClick = { marked = if (isMarked) marked - c.id else marked + c.id },
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = when {
+                                        rowF -> if (isMarked) Color(0xFF2A3A66) else Color(0xFF243055)
+                                        isMarked -> Color(0xFF1E2A45)
+                                        else -> Color(0xFF141A2A)
+                                    },
+                                    border = when {
+                                        rowF -> androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFC94D))
+                                        isMarked -> androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFC94D))
+                                        else -> null
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                        .onFocusChanged {
+                                            if (it.isFocused) focusedRowId.value = c.id
+                                            else if (focusedRowId.value == c.id) focusedRowId.value = null
+                                        }
+                                ) {
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
+                                        Text(if (isMarked) "☑" else "☐", fontSize = 16.sp, color = Color(0xFFE8EEFC))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(namen[c.id] ?: c.name,
+                                            color = if (isMarked) Color(0xFFE8EEFC) else Color(0xFF8FA3C8),
+                                            fontSize = 14.sp,
+                                            fontWeight = if (isMarked) FontWeight.SemiBold else FontWeight.Normal,
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f))
                                     }
-                            ) {
-                                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
-                                    Text(if (isMarked) "☑" else "☐", fontSize = 16.sp, color = Color(0xFFE8EEFC))
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(CategoryPrefs.labelOf(scope, c),
-                                        color = if (isMarked) Color(0xFFE8EEFC) else Color(0xFF8FA3C8),
-                                        fontSize = 14.sp,
-                                        fontWeight = if (isMarked) FontWeight.SemiBold else FontWeight.Normal,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f))
                                 }
                             }
-                            Spacer(Modifier.height(5.dp))
-                        }
                         }
                     }
                 }
