@@ -112,15 +112,15 @@
     <h1>Post für <span class="gold">alle Konten</span><br>in einer ruhigen Oberfläche</h1>
     <p class="lead">Der weltweit einzige grafische Client für himalaya. Schlank, dunkel, ohne Ballast — und mit einem Verbindungs-Zahnrad, das die Postfächer auch dort lässt, wo sie hingehören.</p>
     <div class="badges">
-      <span class="badge gold">Version 0.8.0</span>
+      <span class="badge gold">Version 0.8.1</span>
       <span class="badge">Windows 10/11</span>
       <span class="badge">Linux</span>
       <span class="badge">Im Browser</span>
       <span class="badge">Freie Lizenz</span>
     </div>
     <div class="cta">
-      <a class="btn gold" href="https://github.com/smartonaut/smartys-himalaya-gui/releases/download/v0.8.0/SmartysHimalayaGUI-0.8.0-Setup.exe">Windows-Installer</a>
-      <a class="btn ghost" href="https://github.com/smartonaut/smartys-himalaya-gui/releases/download/v0.8.0/smartys-himalaya-gui_0.8.0_all.deb">Linux-Paket (DEB)</a>
+      <a class="btn gold" href="https://github.com/smartonaut/smartys-himalaya-gui/releases/download/v0.8.1/SmartysHimalayaGUI-0.8.1-Setup.exe">Windows-Installer</a>
+      <a class="btn ghost" href="https://github.com/smartonaut/smartys-himalaya-gui/releases/download/v0.8.1/smartys-himalaya-gui_0.8.1_all.deb">Linux-Paket (DEB)</a>
     </div>
     <p class="note" style="text-align:left;margin-top:26px;">
       Diese Seite beschreibt ehrlich, was die Anwendung kann — und was noch nicht. Keine Werbeversprechen.
@@ -168,7 +168,7 @@
   </div>
 
   <h3>Linux (Debian, Ubuntu, Mint)</h3>
-  <pre><code>sudo dpkg -i smartys-himalaya-gui_0.8.0_all.deb
+  <pre><code>sudo dpkg -i smartys-himalaya-gui_0.8.1_all.deb
 sudo apt-get install -f</code></pre>
   <p>Danach steht die Anwendung im Anwendungsmenü. Zusätzlich läuft sie als Dienst im Hintergrund und ist im Browser unter <code>http://127.0.0.1:8770</code> erreichbar.</p>
   <p>Wer lieber ohne Paket arbeitet:</p>
@@ -238,7 +238,16 @@ ssh-copy-id benutzer@zielrechner</code></pre>
   <h2><span class="num">06</span>Versionslog</h2>
 
   <div class="version">
-    <div class="vhead"><span class="vnum">0.8.0</span><span class="vdate">21.11.2026</span><span class="badge gold">Aktuell</span></div>
+    <div class="vhead"><span class="vnum">0.8.1</span><span class="vdate">21.11.2026</span><span class="badge gold">Aktuell</span></div>
+    <ul>
+      <li><b>Virenscanner im Paket:</b> <code>Depends: clamav</code> bzw. <code>Requires: clamav</code> — apt und rpm prüfen selbst, ob er schon da ist, und holen nur, was fehlt</li>
+      <li><b>Daemon-Prüfung:</b> 5 ms statt 4,8 s je Anhang, weil die Signaturen nicht mehr bei jedem Aufruf geladen werden</li>
+      <li><b>Wichtig:</b> der Daemon meldete unlesbare Dateien als „ok" (Rückgabewert 0 trotz Fehler) — zählt jetzt als „nicht geprüft"</li>
+    </ul>
+  </div>
+
+  <div class="version">
+    <div class="vhead"><span class="vnum">0.8.0</span><span class="vdate">21.11.2026</span></div>
     <ul>
       <li><b>Anhänge öffnen:</b> der Download holte den falschen MIME-Teil — jetzt richtig, mit Name und Größe je Anhang</li>
       <li><b>Vorschaufenster</b> für PDF, Bilder und Text; Word &amp; Co. werden weiterhin nur geladen</li>
