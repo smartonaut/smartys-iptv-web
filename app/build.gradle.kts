@@ -1,0 +1,116 @@
+import java.util.Properties
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
+
+android {
+    namespace = "com.smartys.iptv"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "com.smartys.iptv"
+        minSdk = 21
+        targetSdk = 35
+        versionCode = 26
+        versionName = "0.8.6"
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    flavorDimensions += "target"
+    productFlavors {
+        // FireTV / Android TV: unverändert wie bisher (v0.8.6, EncryptedSharedPreferences).
+        create("tv") {
+            dimension = "target"
+            applicationId = "com.smartys.iptv"
+            versionCode = 63
+            versionName = "0.8.44"
+            buildConfigField("boolean", "USE_KEYSTORE_STORE", "false")
+            buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "true")
+            buildConfigField("boolean", "LITE_DEVICE", "false")
+            manifestPlaceholders["appName"] = "Smarty Player"
+        }
+        // Handy (Android 16): eigene App-ID, Keystore-Speicher (Crash-Fix).
+        create("phone") {
+            dimension = "target"
+            applicationId = "com.smartys.iptv.mobile"
+            minSdk = 23
+            versionCode = 30
+            versionName = "0.8.10"
+            buildConfigField("boolean", "USE_KEYSTORE_STORE", "true")
+            buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "false")
+            buildConfigField("boolean", "LITE_DEVICE", "false")
+            manifestPlaceholders["appName"] = "Smarty Player Handy"
+        }
+        // LITE: fuer alte Fire-TV-Sticks (1./2. Gen, Android 5.x, 875 MB RAM,
+        // 96-MB-Heap). Eigene App-ID, damit die normale TV-Version auf neueren
+        // Geraeten unberuehrt bleibt. LITE_DEVICE schaltet die Sparmassnahmen:
+        // kurzes EPG-Fenster, kleiner Bild-Cache, kein UHD, fix kleiner Puffer.
+        create("lite") {
+            dimension = "target"
+            applicationId = "com.smartys.iptv.lite"
+            versionCode = 19
+            versionName = "0.1.19"
+            buildConfigField("boolean", "USE_KEYSTORE_STORE", "false")
+            buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "true")
+            buildConfigField("boolean", "LITE_DEVICE", "true")
+            manifestPlaceholders["appName"] = "Smarty Player Lite"
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            val props = Properties().apply {
+                val f = rootProject.file("keystore.properties")
+                if (f.exists()) load(f.inputStream())
+            }
+            storeFile = rootProject.file(props.getProperty("storeFile"))
+            storePassword = props.getProperty("storePassword")
+            keyAlias = props.getProperty("keyAlias")
+            keyPassword = props.getProperty("keyPassword")
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.compose.ui:ui:1.8.1")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.8.1")
+    implementation("androidx.tv:tv-material:1.0.1")
+    implementation("androidx.compose.material3:material3:1.3.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
+    implementation("androidx.media3:media3-exoplayer:1.8.1")
+    implementation("androidx.media3:media3-ui:1.8.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.8.1")
+    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.security:security-crypto:1.1.0-alpha07")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+    testImplementation("junit:junit:4.13.2")
+}

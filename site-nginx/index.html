@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Smartys — kleine, saubere Apps. IPTV-Player und mehr.">
+<title>Smartys — Apps, die einfach funktionieren | Smartys Player</title>
+<link rel="canonical" href="https://smartys.tech/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Smartys">
+<meta property="og:title" content="Smartys — Apps, die einfach funktionieren">
+<meta property="og:description" content="Kleine, saubere Software ohne Ballast. IPTV-Player und mehr.">
+<meta property="og:url" content="https://smartys.tech/">
+<meta property="og:image" content="https://smartys.tech/logo.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Smartys — Apps, die einfach funktionieren">
+<meta name="twitter:description" content="Kleine, saubere Software ohne Ballast. IPTV-Player und mehr.">
+<meta name="twitter:image" content="https://smartys.tech/logo.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<link href="fonts/inter.css" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --bg:#080b14; --panel:#101522; --card:#131a2b; --border:#1e2638;
+    --text:#eef2fb; --muted:#94a0bd; --dim:#5f6c89; --gold:#ffc94d;
+  }
+  body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; -webkit-font-smoothing:antialiased; overflow-x:hidden; }
+  .wrap { max-width:1080px; margin:0 auto; padding:0 24px; }
+
+  nav { position:sticky; top:0; z-index:20; background:rgba(8,11,20,.82); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); }
+  nav .wrap { display:flex; justify-content:space-between; align-items:center; padding:18px 24px; }
+  nav .links { display:flex; gap:8px; align-items:center; }
+  .btn { display:inline-block; padding:11px 22px; border-radius:12px; font-weight:600; font-size:14.5px; text-decoration:none; border:none; cursor:pointer; transition:transform .15s, box-shadow .2s; }
+  .btn:hover { transform:translateY(-2px); }
+  .btn.gold { background:linear-gradient(135deg,var(--gold),#ffb347); color:#1a1200; box-shadow:0 6px 24px rgba(255,201,77,.35); }
+  .btn.ghost { background:rgba(255,255,255,.06); color:var(--text); border:1px solid var(--border); }
+  .btn.ghost:hover { border-color:rgba(255,255,255,.25); background:rgba(255,255,255,.1); }
+  .logo { font-size:20px; font-weight:800; letter-spacing:-.4px; }
+  .logo .dot { color:var(--gold); }
+  .logo .tech { background:linear-gradient(90deg,var(--gold),#f472b6,#8b5cf6,#22d3ee); -webkit-background-clip:text; background-clip:text; color:transparent; }
+
+  .hero { padding:100px 0 60px; text-align:center; position:relative; }
+  .hero::before { content:""; position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(700px 400px at 50% -10%, rgba(255,201,77,.12), transparent 60%); }
+  .hero .wrap { position:relative; }
+  .hero .mark { width:64px; height:64px; border-radius:16px; background:linear-gradient(135deg,var(--gold),#ffb347); margin:0 auto 28px; display:flex; align-items:center; justify-content:center; font-size:30px; box-shadow:0 12px 40px rgba(255,201,77,.3); }
+  .hero h1 { font-size:clamp(34px,5vw,58px); font-weight:900; letter-spacing:-2px; line-height:1.05; max-width:720px; margin:0 auto; }
+  .hero h1 em { font-style:normal; color:var(--gold); }
+  .hero p.sub { font-size:18px; color:var(--muted); max-width:520px; margin:22px auto 0; }
+
+  .apps { padding:30px 0 90px; }
+  .apps h2 { font-size:14px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--dim); text-align:center; margin-bottom:28px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:22px; }
+  .app { background:var(--card); border:1px solid var(--border); border-radius:20px; padding:30px; text-decoration:none; color:var(--text); display:flex; flex-direction:column; transition:transform .2s, border-color .2s; }
+  .more { display:inline-block; margin-top:10px; font-size:13.5px; font-weight:600; color:var(--gold); }
+  .app:hover { transform:translateY(-5px); border-color:rgba(255,201,77,.5); }
+  .app .top { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
+  .app .icon { width:48px; height:48px; border-radius:12px; background:linear-gradient(135deg,#11172a,#1a2440); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .app .name { font-size:20px; font-weight:800; letter-spacing:-.3px; }
+  .app .tag { font-size:11px; font-weight:700; color:var(--gold); background:rgba(255,201,77,.12); padding:3px 10px; border-radius:99px; margin-left:auto; }
+  .app .desc { color:var(--muted); font-size:14.5px; flex:1; }
+  .app .cta { margin-top:20px; font-weight:700; font-size:14px; color:var(--gold); }
+  .app .cta span { display:inline-block; margin-left:4px; transition:margin .2s; }
+  .app:hover .cta span { margin-left:10px; }
+
+  .soon { background:var(--panel); border:1px dashed var(--border); border-radius:20px; padding:30px; display:flex; align-items:center; justify-content:center; flex-direction:column; color:var(--dim); text-align:center; min-height:220px; }
+  .soon .plus { font-size:34px; margin-bottom:10px; }
+  .soon p { font-size:14px; }
+
+  footer { padding:36px 0 56px; color:var(--dim); font-size:13px; border-top:1px solid var(--border); }
+  footer .wrap { display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px; align-items:center; }
+  footer a { color:var(--muted); text-decoration:none; margin-left:18px; }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Smartys",
+  "url": "https://smartys.tech/",
+  "logo": "https://smartys.tech/logo.png",
+  "contactPoint": {
+    "@type": "ContactPoint",
+    "email": "kontakt@smartys.tech",
+    "contactType": "customer support"
+  }
+}
+</script>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo">Smartys<span class="dot">.</span><span class="tech">Tech</span></div>
+  <div class="links">
+    <a class="btn ghost" href="https://forum.smartys.tech">Community</a>
+  </div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="mark">✦</div>
+  <h1>Apps, die <em>einfach funktionieren.</em></h1>
+  <p class="sub">Kleine, saubere Software ohne Ballast. Gebaut, um ihren Job zu machen — nichts weiter.</p>
+</div></header>
+
+<section class="apps"><div class="wrap">
+  <h2>Unsere Apps</h2>
+  <div class="grid">
+    <a class="app" href="https://player.smartys.tech">
+      <div class="top">
+        <span class="icon">📺</span>
+        <span class="name">Smartys Player</span>
+        <span class="tag">Live</span>
+      </div>
+      <p class="desc">Der schlanke Player für Fire TV und Android. Sofortiges EPG, 4K, Auto-Reconnect — und deine Lines verwaltest du selbst.</p>
+      <span class="cta">Zum Player <span>→</span></span>
+    </a>
+
+        <a class="app" href="mailto:kontakt@smartys.tech?subject=VinCatcher">
+      <div class="top">
+        <span class="icon">🚗</span>
+        <span class="name">VinCatcher</span>
+        <span class="tag">Windows</span>
+      </div>
+      <p class="desc">Automatische VIN-Erkennung aus Screenshots (Win+Shift+S) — für Werkstätten, TÜV und Zulassungsstellen. RapidOCR-Engine (ONNX), ISO-3779-Prüfziffer-Validierung, OCR-Fehlerkorrektur (E/S, J/Z) und KBA-Fahrzeugdaten-Abgleich. Läuft unsichtbar im System-Tray mit Hotkey (Strg+Umschalt+V) unter Windows 10/11.</p>
+      <span class="cta">Interesse? kontakt@smartys.tech <span>→</span></span>
+    </a>
+
+    <a class="app" href="mailto:kontakt@smartys.tech?subject=RepDoc%20Automation">
+      <div class="top">
+        <span class="icon">🤖</span>
+        <span class="name">RepDoc Automation</span>
+        <span class="tag">Bots</span>
+      </div>
+      <p class="desc">Automatisierung fürs Werkstatt-System RepDoc: vier Telegram-Bots für Foto→Fahrzeug-Identifikation (Kennzeichen/VIN), Teile-Preisvergleich über sechs Großhändler, Waren-Retoure, technische Daten, Termine und Fahrzeug-Parkplatz-Karte.</p>
+      <span class="cta">Interesse? kontakt@smartys.tech <span>→</span></span>
+    </a>
+
+    <a class="app" href="mailto:kontakt@smartys.tech?subject=Matthies%20HenryJr">
+      <div class="top">
+        <span class="icon">🔧</span>
+        <span class="name">Matthies HenryJr.</span>
+        <span class="tag">In Arbeit</span>
+      </div>
+      <p class="desc">Die RepDoc-Automation auch für das Werkstatt-System Matthies HenryJr.: Teile-Preisvergleich mit Einkaufspreis-Optimierung, Telegram-Bot für Termine &amp; Kilometerstände, Auftrags- und Bestell-Workflow. Aktuell in Entwicklung.</p>
+      <span class="cta">Interesse? kontakt@smartys.tech <span>→</span></span>
+    </a>
+    <a class="app" href="https://camviewer.smartys.tech">
+      <div class="top">
+        <span class="icon">📷</span>
+        <span class="name">Smartys CamViewer</span>
+        <span class="tag">Live</span>
+      </div>
+      <p class="desc">Alle Werkstatt-Kameras in einer sauberen deutschen App — MultiView-Übersicht, SingleView mit PTZ-Steuerung (Schwenken/Neigen/Zoom, Festpositionen). UniFi, Hikvision, Reolink, Xiongmai &amp; Co. über RTSP/ONVIF, ohne die unübersichtlichen Hersteller-Apps.</p>
+      <span class="cta">Jetzt entdecken <span>→</span></span>
+    </a>
+    <a class="app" href="https://downloader.smartys.tech">
+      <div class="top">
+        <span class="icon">⬇️</span>
+        <span class="name">Smartys Downloader</span>
+        <span class="tag">Live</span>
+      </div>
+      <p class="desc">Der schlanke Download-Beschleuniger: segmentierte Downloads, Resume, Torrent und Zeitplan — für Windows, Ubuntu und Debian, mit verschlüsseltem Download.</p>
+      <span class="cta">Jetzt entdecken <span>→</span></span>
+    </a>
+
+    <a class="app" href="/himalaya.html">
+      <div class="top">
+        <span class="icon">💌</span>
+        <span class="name">Smartys Himalaya GUI</span>
+        <span class="tag">Neu</span>
+      </div>
+      <p class="desc">Post für 32 Konten in einer ruhigen Oberfläche: lesen, antworten, Signaturen. Der weltweit einzige grafische Client für himalaya — als Programm für Windows und Linux, oder im Browser. Läuft mit deinen bestehenden Postfächern, auf Wunsch über einen himalaya-Server im Netzwerk.</p>
+      <span class="more">Zur Anleitung →</span>
+    </a>
+
+
+  </div>
+    <div class="soon" style="margin-top:22px;">
+      <div class="plus">✦</div>
+      <p>Mehr in Arbeit — Ideen und Wünsche ins <a href="https://forum.smartys.tech" style="color:var(--gold);text-decoration:none;">Community-Forum</a></p>
+    </div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div>© 2026 Smartys — smartys.tech</div>
+  <div>
+    <a href="/impressum.html">Impressum</a>
+    <a href="/datenschutz.html">Datenschutz</a>
+  </div>
+</div></footer>
+
+</body>
+</html>

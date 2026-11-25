@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Smartys IPTV — Compact Rows</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    background: #0b0e14; color: #e8eefc;
+    width: 1920px; height: 1080px; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    height: 100px; display: flex; align-items: center; padding: 0 56px; gap: 40px;
+    background: #0b0e14; border-bottom: 2px solid #171d2c;
+  }
+  .logo { font-size: 36px; font-weight: 800; }
+  .logo span { color: #ffc94d; }
+  .tabs { display: flex; gap: 8px; height: 100%; align-items: stretch; }
+  .tab {
+    display: flex; align-items: center; padding: 0 28px; font-size: 21px;
+    color: #7d8ba8; border-bottom: 4px solid transparent; cursor: pointer; font-weight: 600;
+  }
+  .tab.active { color: #ffc94d; border-color: #ffc94d; }
+  .search {
+    margin-left: auto; width: 380px; height: 54px;
+    background: #141926; border: 2px solid #232c42; border-radius: 10px;
+    display: flex; align-items: center; padding: 0 20px; color: #6b7a99; font-size: 20px;
+  }
+  .body { display: flex; height: calc(100% - 100px); }
+  .cats {
+    width: 360px; border-right: 2px solid #171d2c; padding: 20px 0;
+    overflow-y: auto;
+  }
+  .cat { display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 24px; font-size: 20px; color: #7d8ba8; cursor: pointer; }
+  .cat .n { font-size: 15px; color: #4d5b78; }
+  .cat:hover { color: #e8eefc; background: #11172a; }
+  .cat.active { color: #ffc94d; background: #171d2c; border-left: 5px solid #ffc94d; font-weight: 700; }
+
+  .list { flex: 1; padding: 20px 40px; overflow: hidden; }
+  .listhead { display: flex; justify-content: space-between; align-items: baseline; padding: 0 12px 14px; }
+  .listhead h2 { font-size: 26px; }
+  .listhead .cnt { color: #6b7a99; font-size: 18px; }
+  .row {
+    display: flex; align-items: center; gap: 22px;
+    padding: 10px 16px; border-radius: 12px; cursor: pointer;
+    margin-bottom: 6px;
+  }
+  .row:hover { background: #131a2e; }
+  .row.focused {
+    background: linear-gradient(90deg, rgba(255,201,77,.18), rgba(255,201,77,.04));
+    border: 2px solid #ffc94d;
+  }
+  .num { width: 70px; text-align: right; font-size: 22px; font-weight: 700; color: #55648a; font-variant-numeric: tabular-nums; }
+  .chlogo { width: 120px; height: 60px; background: #141a2a; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; color: #8fa3c8; font-size: 17px; }
+  .info { flex: 1; }
+  .info .name { font-size: 21px; font-weight: 600; }
+  .info .epg { font-size: 16px; color: #7d8ba8; margin-top: 3px; }
+  .row.focused .info .epg { color: #ffc94d; }
+  .fav { font-size: 26px; color: #3a4763; width: 48px; text-align: center; }
+  .fav.on { color: #ffc94d; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo">Smartys <span>IPTV</span></div>
+    <div class="tabs">
+      <div class="tab active">Live-TV</div>
+      <div class="tab">Filme</div>
+      <div class="tab">Serien</div>
+      <div class="tab">Favoriten</div>
+    </div>
+    <div class="search">🔍 Suchen…</div>
+  </div>
+  <div class="body">
+    <div class="cats">
+      <div class="cat">Alle Kanäle <span class="n">1503</span></div>
+      <div class="cat active">|DE| 4K+ Paket <span class="n">80</span></div>
+      <div class="cat">|DE| Allgemein <span class="n">86</span></div>
+      <div class="cat">|DE| Sky Film &amp; Serie <span class="n">94</span></div>
+      <div class="cat">|DE| Kinder <span class="n">42</span></div>
+      <div class="cat">|DE| Unterhaltung <span class="n">67</span></div>
+      <div class="cat">|DE| Regional <span class="n">55</span></div>
+      <div class="cat">|PL| Poland FHD <span class="n">88</span></div>
+    </div>
+    <div class="list">
+      <div class="listhead"><h2>4K+ Paket</h2><span class="cnt">80 Kanäle · sortiert nach Nummer</span></div>
+      <div class="row"><div class="num">101</div><div class="chlogo">NAT GEO</div><div class="info"><div class="name">DE – NATIONAL GEOGRAPHIC 4K</div><div class="epg">08:55 · Wildes Deutschland</div></div><div class="fav">☆</div></div>
+      <div class="row"><div class="num">102</div><div class="chlogo">SPIEGEL</div><div class="info"><div class="name">DE – SPIEGEL GESCHICHTE 4K</div><div class="epg">09:45 · Der Kalte Krieg</div></div><div class="fav on">★</div></div>
+      <div class="row focused"><div class="num">103</div><div class="chlogo">SUPER RTL</div><div class="info"><div class="name">DE – SUPER RTL 4K</div><div class="epg">09:00 · SpongeBob Schwammkopf</div></div><div class="fav on">★</div></div>
+      <div class="row"><div class="num">104</div><div class="chlogo">SYFY</div><div class="info"><div class="name">DE – SYFY 4K</div><div class="epg">09:00 · Stargate Atlantis</div></div><div class="fav">☆</div></div>
+      <div class="row"><div class="num">105</div><div class="chlogo">TELE 5</div><div class="info"><div class="name">DE – TELE 5 4K</div><div class="epg">09:30 · Klassiker der 80er</div></div><div class="fav">☆</div></div>
+      <div class="row"><div class="num">106</div><div class="chlogo">RTL II</div><div class="info"><div class="name">DE – RTL II 4K</div><div class="epg">10:00 · Nachrichten</div></div><div class="fav">☆</div></div>
+      <div class="row"><div class="num">107</div><div class="chlogo">VOX</div><div class="info"><div class="name">DE – VOX 4K</div><div class="epg">09:40 · auto mobil</div></div><div class="fav">☆</div></div>
+    </div>
+  </div>
+</body>
+</html>

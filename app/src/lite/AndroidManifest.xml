@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  LITE-Flavor: gilt NUR fuer den lite-Build (com.smartys.iptv.lite).
+  Alte Fire-TV-Sticks (1./2. Gen, Android 5.x) haben heapgrowthlimit = 96 MB;
+  largeHeap hebt die Grenze auf 256 MB. Der tv-Build bleibt unveraendert.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application android:largeHeap="true" />
+
+</manifest>

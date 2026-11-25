@@ -1,0 +1,43 @@
+http:
+  routers:
+    player:
+      rule: "Host(`player.smartys.tech`)"
+      entryPoints:
+        - "websecure"
+      service: player
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - sec-headers
+
+    panel:
+      rule: "Host(`panel.smartys.tech`)"
+      entryPoints:
+        - "websecure"
+      service: panel
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - sec-headers
+
+  services:
+    player:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8102"
+
+    panel:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8100"
+
+  middlewares:
+    sec-headers:
+      headers:
+        frameDeny: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        referrerPolicy: same-origin
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        forceSTSHeader: true

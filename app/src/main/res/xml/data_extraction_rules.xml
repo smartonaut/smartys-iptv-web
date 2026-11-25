@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto-Backup (API 31+, dataExtractionRules): Die Prefs-Datei mit Player-ID,
+     Pairing-Passwort und Provider-Zugängen muss gesichert UND wiederhergestellt
+     werden (Spiegel je Plattform: Android/TV — siehe PLAYER-IDENTITY.md).
+     cloud-backup = Google-Backup, überlebt die Neuinstallation der App;
+     device-transfer = Umzug auf ein anderes Gerät. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="smartys_iptv_creds.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="smartys_iptv_creds.xml" />
+    </device-transfer>
+</data-extraction-rules>

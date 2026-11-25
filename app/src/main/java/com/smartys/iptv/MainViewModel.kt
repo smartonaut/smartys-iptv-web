@@ -1,0 +1,846 @@
+package com.smartys.iptv
+
+import android.app.Application
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import java.util.concurrent.TimeUnit
+
+sealed class AppState {
+    object NeedsLogin : AppState()
+    object Loading : AppState()
+    data class Ready(val categories: List<Category>, val channels: List<LiveStream>) : AppState()
+    data class Error(val message: String) : AppState()
+}
+
+class MainViewModel(app: Application) : AndroidViewModel(app) {
+
+    init {
+        // Zweite VOD-Quelle und Kameras brauchen je einen kleinen Speicher.
+        Jellyfin.init(getApplication())
+        Kameras.init(getApplication())
+    }
+
+    var state by mutableStateOf<AppState>(AppState.NeedsLogin)
+        private set
+
+    var creds by mutableStateOf<CredStore.Creds?>(null)
+        private set
+
+    // Favoriten + zuletzt gesehen (simple Persistenz via SharedPreferences reicht für MVP)
+    var favorites by mutableStateOf<Set<String>>(emptySet())
+        private set
+    var lastWatched by mutableStateOf<String?>(null)
+        private set
+    // Zuletzt-gesehen-Historie: neueste zuerst, max. 10, ohne Duplikate
+    var recentIds by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    // ---------- VOD (Movies + Series) ----------
+    var vodCategories by mutableStateOf<List<Category>>(emptyList())
+        private set
+    var vodMovies by mutableStateOf<List<VodStream>>(emptyList())
+        private set
+    var seriesCategories by mutableStateOf<List<Category>>(emptyList())
+        private set
+    var seriesShows by mutableStateOf<List<SeriesStream>>(emptyList())
+        private set
+    var vodLoading by mutableStateOf(false)
+        private set
+    var vodCatLoading by mutableStateOf(false)
+        private set
+    var vodError by mutableStateOf<String?>(null)
+        private set
+
+    /** Statuszeile fuer den Jellyfin-Abschnitt in den Einstellungen. */
+    var jfStatus by mutableStateOf<String?>(null)
+        private set
+
+    /** Lädt NUR die VOD-Kategorien. Die Filme kommen erst beim Öffnen einer
+     *  Gruppe (loadVodCategory) — siehe dort. */
+    fun loadVod() {
+        val c = creds ?: run { android.util.Log.d("SmartysIPTV", "loadVod: KEINE creds"); return }
+        val a = api ?: run { android.util.Log.d("SmartysIPTV", "loadVod: KEINE api"); return }
+        if (vodLoading) { android.util.Log.d("SmartysIPTV", "loadVod: laeuft schon"); return }
+        android.util.Log.d("SmartysIPTV", "loadVod: START")
+        vodLoading = true; vodError = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cats = withTimeout(60000) { a.vodCategories(c.user, c.pass) }
+                android.util.Log.d("SmartysIPTV", "loadVod: Kategorien=${cats.size}")
+                // Ausgeblendete Gruppen werden gar nicht erst angeboten.
+                val hidden = CategoryPrefs.hiddenIds("movies")
+                val catsClean = cats.filter { it.id !in hidden }
+                // Jellyfin steht als eigene Gruppe immer oben (nur wenn verbunden).
+                val jfKat = if (Jellyfin.gespeichert() != null) listOf(Jellyfin.kategorieFilme()) else emptyList()
+                withContextMain { vodCategories = jfKat + catsClean }
+            } catch (e: Exception) {
+                android.util.Log.w("SmartysIPTV", "loadVod: FEHLER", e)
+                withContextMain { vodError = "Film-Gruppen laden fehlgeschlagen: ${e.message}" }
+            } finally {
+                withContextMain { vodLoading = false }
+            }
+        }
+    }
+
+    /**
+     * Lädt die Filme EINER Gruppe.
+     *
+     * WARUM kategorieweise: Die Line hat 38.502 Filme (15,8 MB JSON). Der Stick
+     * hat 192 MB Heap und lief beim Versuch, alle auf einmal zu halten,
+     * dauerhaft auf 192/192 MB (0 % frei) — der Lader brach mit
+     * TimeoutCancellationException ab, waehrend Serien (9.413) durchliefen.
+     * Eine einzelne Gruppe sind wenige hundert Einträge, die passen sicher.
+     */
+    fun loadVodCategory(catId: String) {
+        val c = creds ?: return
+        val a = api ?: return
+        if (vodLoading || vodCatLoading) return
+        vodCatLoading = true; vodError = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                if (catId == Jellyfin.CAT_FILME) {
+                    val jf = Jellyfin.gespeichert()
+                    val filme = if (jf != null) Jellyfin.filme(jf) else emptyList()
+                    android.util.Log.d("SmartysIPTV", "Jellyfin: ${filme.size} Filme")
+                    withContextMain { vodMovies = filme; vodCatLoading = false }
+                    return@launch
+                }
+                val movies = withTimeout(120000) {
+                    a.vodStreams(c.user, c.pass, categoryId = catId)
+                }
+                val catName = vodCategories.firstOrNull { it.id == catId }?.name ?: ""
+                movies.forEach { it.categoryName = catName }
+                android.util.Log.d("SmartysIPTV", "loadVodCategory($catId): ${movies.size} Filme")
+                withContextMain { vodMovies = movies }
+            } catch (e: Exception) {
+                android.util.Log.w("SmartysIPTV", "loadVodCategory: FEHLER", e)
+                withContextMain {
+                    vodError = "Filme dieser Gruppe laden fehlgeschlagen: ${e.message}"
+                }
+            } finally {
+                withContextMain { vodCatLoading = false }
+            }
+        }
+    }
+
+    /** Lädt Serien-Kategorien + Serien (einmalig, nach Login). */
+    fun loadSeries() {
+        val c = creds ?: run { android.util.Log.d("SmartysIPTV", "loadSeries: KEINE creds"); return }
+        val a = api ?: run { android.util.Log.d("SmartysIPTV", "loadSeries: KEINE api"); return }
+        android.util.Log.d("SmartysIPTV", "loadSeries: START")
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cats = withTimeout(30000) { a.seriesCategories(c.user, c.pass) }
+                android.util.Log.d("SmartysIPTV", "loadSeries: Kategorien=${cats.size}")
+                val shows = withTimeout(180000) { a.seriesStreams(c.user, c.pass) }
+                android.util.Log.d("SmartysIPTV", "loadSeries: Serien=${shows.size}")
+                val catNames = cats.associate { it.id to it.name }
+                // Ausgeblendete Gruppen gar nicht erst in den Zustand uebernehmen.
+                val hidden = CategoryPrefs.hiddenIds("series")
+                val showsClean = shows.filter { it.categoryId !in hidden }
+                showsClean.forEach { it.categoryName = catNames[it.categoryId] ?: "" }
+                android.util.Log.d("SmartysIPTV", "loadSeries: sichtbar=${showsClean.size} (ausgeblendet ${shows.size - showsClean.size})")
+                val jfSerien = Jellyfin.gespeichert()?.let { runCatching { Jellyfin.serien(it) }.getOrNull() } ?: emptyList()
+                withContextMain {
+                    seriesCategories =
+                        if (jfSerien.isEmpty()) cats.filter { it.id !in hidden }
+                        else listOf(Jellyfin.kategorieSerien()) + cats.filter { it.id !in hidden }
+                    seriesShows = jfSerien + showsClean
+                }
+            } catch (e: Exception) {
+                android.util.Log.d("SmartysIPTV", "Serien laden fehlgeschlagen: ${e.message}")
+            }
+        }
+    }
+
+    // ---------- Jellyfin (zweite Quelle) ----------
+
+    /** Server suchen (oder feste Adresse), anmelden, Inhalte nachladen. */
+    fun jfVerbinden(base: String?, user: String, pw: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                withContextMain { jfStatus = "suche Server …" }
+                val ziel = base?.takeIf { it.isNotBlank() } ?: Jellyfin.suchen().firstOrNull()?.base
+                if (ziel == null) {
+                    withContextMain { jfStatus = "kein Jellyfin im Netz gefunden" }
+                    return@launch
+                }
+                withContextMain { jfStatus = "melde an bei $ziel …" }
+                val auth = Jellyfin.anmelden(ziel, user, pw)
+                if (auth == null) {
+                    withContextMain { jfStatus = "Anmeldung abgelehnt — Benutzer oder Passwort falsch" }
+                    return@launch
+                }
+                withContextMain {
+                    jfStatus = "angemeldet als ${auth.userName}"
+                    vodLoading = false; vodCatLoading = false
+                }
+                loadVod()
+                loadSeries()
+            } catch (e: Exception) {
+                withContextMain { jfStatus = "Jellyfin: ${e.message}" }
+            }
+        }
+    }
+
+    fun jfAbmelden() {
+        Jellyfin.merken(null)
+        jfStatus = null
+        vodCategories = vodCategories.filterNot { it.id == Jellyfin.CAT_FILME }
+        seriesCategories = seriesCategories.filterNot { it.id == Jellyfin.CAT_SERIEN }
+        vodMovies = vodMovies.filterNot { it.streamId.startsWith("jf:") }
+        seriesShows = seriesShows.filterNot { it.seriesId.startsWith("jf:") }
+    }
+
+    // ---------- Demo-Modus ----------
+
+    /** 69 freie Sender in 31 Laendergruppen — ohne Line, ohne Login. */
+    fun demoStarten() {
+        state = AppState.Ready(DemoChannels.KATEGORIEN, DemoChannels.build())
+    }
+
+    /** Serien-Episoden (Staffeln) einer Serie laden. */
+    suspend fun fetchSeriesInfo(seriesId: String): SeriesInfo? {
+        // Jellyfin-Serien haben ihre Folgen nicht bei Xtream.
+        if (seriesId.startsWith("jf:")) {
+            val jf = Jellyfin.gespeichert() ?: return null
+            return runCatching { Jellyfin.folgen(jf, seriesId) }.getOrNull()
+        }
+        return runCatching {
+            val c = creds ?: return@runCatching null
+            val a = api ?: return@runCatching null
+            withTimeout(15000) { a.seriesInfo(c.user, c.pass, seriesId = seriesId) }
+        }.getOrNull()
+    }
+
+    // ---------- Meine Liste (Filme + Serien) ----------
+    // Getrennt von `favorites` — die gelten nur fuer Live-Sender. Die Eintraege
+    // sind selbsttragend (siehe WatchItem), hier wird nur gespiegelt, was im
+    // Profil-Speicher steht.
+    var watchItems by mutableStateOf<List<WatchItem>>(emptyList())
+        private set
+    var watchKeys by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** Merkliste des AKTIVEN Profils neu einlesen (Start + Profilwechsel). */
+    fun reloadWatchlist() {
+        val app = getApplication<Application>()
+        watchItems = WatchlistStore.items(app)
+        watchKeys = watchItems.map { it.key() }.toSet()
+    }
+
+    /** true = gemerkt. Liest `watchKeys`, damit Compose bei Aenderungen reagiert. */
+    fun isMarked(kind: String, id: String): Boolean = "$kind:$id" in watchKeys
+
+    fun toggleWatch(item: WatchItem) {
+        val neu = WatchlistStore.toggle(getApplication(), item)
+        watchItems = neu
+        watchKeys = neu.map { it.key() }.toSet()
+    }
+
+    private var api: XtreamApi? = null
+    private var channelsCache: List<LiveStream> = emptyList()
+
+    // ---------- Multi-Provider ----------
+    // alle gespeicherten Provider (Index-aligned mit `apis`); `creds` bleibt primary (erster).
+    var allProviders by mutableStateOf<List<CredStore.Creds>>(emptyList())
+        private set
+    private var apis: List<XtreamApi> = emptyList()
+
+    // ---------- Sicherheits-Passwort (Line im Panel verschlüsselt) ----------
+    // Panel liefert encrypted:true + salt + cipher_*-Felder statt Klartext.
+    // Dann: UI fragt das Sicherheits-Passwort ab, unlockLine() entschlüsselt
+    // und legt plain in RAM (Session) + auf der Platte (CredStore =
+    // EncryptedSharedPreferences) ab — ab dem nächsten Start kein Passwort
+    // mehr nötig. Gleicher Workflow wie Desktop + Enigma.
+    var unlockNeeded by mutableStateOf(false)
+        private set
+    var unlockError by mutableStateOf("")
+    private var pendingSaltB64 = ""
+    private var pendingIterations = 310_000
+    private var pendingCiphers: List<SecCrypto.SecProvider> = emptyList()
+    private var pendingPlayerId = ""
+
+    /** Stream-URL eines Kanals über SEINEN Provider (statt immer den ersten). */
+    fun streamUrlFor(channel: LiveStream): String? {
+        // Demo-Sender und Kameras bringen ihre Adresse selbst mit.
+        channel.directUrl?.let { return it }
+        val c = allProviders.getOrNull(channel.providerIndex) ?: creds ?: return null
+        return c.streamUrl(channel.streamId)
+    }
+
+    /** MPEG-TS-Stream-URL für die Aufnahme (Xtream liefert Live-TV auch als rohes .ts). */
+    fun tsUrlFor(channel: LiveStream): String? {
+        val c = allProviders.getOrNull(channel.providerIndex) ?: creds ?: return null
+        return c.streamUrl(channel.streamId, "ts")
+    }
+
+    // ---------- EPG-Cache ----------
+    // mutableStateMapOf => Compose recomponiert die Zeile automatisch, sobald das EPG ankommt.
+    val epgCache = mutableStateMapOf<String, List<EpgEntry>>()
+    private val epgInFlight = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val epgSemaphore = kotlinx.coroutines.sync.Semaphore(6)
+
+    /** EPG für Kanal holen (Cache-first). Mehrfachaufrufe sind sicher (dedup). */
+    fun epgFor(channel: LiveStream) {
+        val id = channel.streamId
+        if (epgCache.containsKey(id)) return
+        if (!epgInFlight.add(id)) return
+        val c = creds ?: run { epgInFlight.remove(id); return }
+        viewModelScope.launch(Dispatchers.IO) {
+            epgSemaphore.withPermit {
+                try {
+                    val epg = withTimeout(8000) {
+                        api?.shortEpg(c.user, c.pass, streamId = id)
+                    }
+                    // Xtream liefert Titel/Description base64-kodiert
+                    val list = (epg?.epgListings.orEmpty()).map { e ->
+                        e.copy(
+                            title = e.title?.let { decodeB64(it) } ?: e.title,
+                            start = e.start?.let { fmtTime(it) },
+                            end = e.end?.let { fmtTime(it) }
+                        )
+                    }
+                    epgCache[id] = list
+                } catch (e: Exception) {
+                    android.util.Log.d("SmartysIPTV", "EPG-Fehler Kanal $id: ${e.message}")
+                    epgCache[id] = emptyList() // Fail-soft: nicht dauerhaft neu versuchen
+                } finally {
+                    epgInFlight.remove(id)
+                }
+            }
+        }
+    }
+
+    /** Prefetch für die ersten N Kanäle (nach Login/Kanalliste). */
+    fun prefetchEpg(channels: List<LiveStream>, count: Int = 30) {
+        channels.take(count).forEach { epgFor(it) }
+    }
+
+    // ---------- XMLTV-EPG (Provider-weite EPG-Quelle) ----------
+
+    /** EPG-Ladezustand für die Einstellungen (Fortschritt + Klartext-Meldung). */
+    val epgBusy = mutableStateOf(false)
+    val epgStatus = mutableStateOf("")
+    /** Adresse, mit der der Zusatz-EPG-Index aktuell gefüllt ist. */
+    private var extraGeladenVon: String = ""
+
+    /**
+     * Lädt alle in den Einstellungen freigegebenen EPG-Quellen.
+     * Reihenfolge beim Nachschlagen: Anbieter (tvg-id) -> eigener/zuletzt
+     * eingetragener Link (Kanalname) -> epg.pw (Kanalname).
+     *
+     * @param force true = Zwischenspeicher verwerfen und alles neu laden
+     *              (Einstellungen -> "EPG jetzt aktualisieren")
+     */
+    fun loadXmltvEpg(force: Boolean = false) {
+        val app = getApplication<android.app.Application>()
+        val auswahl = EpgPrefs.lesen(app)
+        val eigeneUrl = EpgPrefs.eigeneUrlLesen(app)
+        viewModelScope.launch(Dispatchers.IO) {
+            // Fehlt in den gespeicherten Zugangsdaten der EPG-Link (typisch nach
+            // einer Installation über eine ältere Version: die Zugangsdaten
+            // bleiben erhalten, das Feld kam erst später dazu), einmal die
+            // Provider-Liste beim Panel neu holen. Sonst bliebe der eigene
+            // EPG-Link für immer leer, ohne dass irgendwo etwas fehlschlägt.
+            val gespeichert = creds
+            if (gespeichert != null && gespeichert.epgUrl.isBlank()) {
+                val pid = CredStore.playerId(app)
+                val ppw = CredStore.pairingPw(app)
+                if (pid.isNotBlank() && ppw.isNotBlank()) {
+                    android.util.Log.d("SmartysIPTV", "EPG: Zugangsdaten ohne EPG-Link — hole sie neu")
+                    runCatching { pairAndLoad(pid, ppw) }
+                }
+            }
+            val c = creds
+            withContextMain { epgBusy.value = true; epgStatus.value = "Lade EPG …" }
+            if (force) XmltvEpg.clearFiles(app)
+            val meldungen = mutableListOf<String>()
+
+            // 1. Anbieter-XMLTV
+            if (auswahl.anbieter && c != null && c.url.isNotBlank()) {
+                val url = "${c.url}/xmltv.php?username=${c.user}&password=${c.pass}"
+                val ok = runCatching { XmltvEpg.ensureLoaded(app, url, force) }.getOrDefault(false)
+                withContextMain { xmltvReady.value = ok }
+                meldungen += if (ok) {
+                    if (XmltvEpg.isProviderFresh()) "Anbieter: aktuell"
+                    else "Anbieter: Daten abgelaufen"
+                } else "Anbieter: nicht erreichbar"
+            } else if (!auswahl.anbieter) {
+                meldungen += "Anbieter: aus"
+            }
+
+            // 2. Eigener Link — vom Nutzer eingetragene Adresse hat Vorrang,
+            //    sonst der im Panel hinterlegte EPG-Link.
+            // Reihenfolge: eigene Adresse -> Panel-Link -> mitgelieferter Standard.
+            // Der Standard macht EPG auch dann nutzbar, wenn im Panel nichts
+            // hinterlegt ist oder die Zugangsdaten alt sind.
+            val zusatz = eigeneUrl.ifBlank { c?.epgUrl ?: "" }
+                .ifBlank { "https://panel.smartys.tech/epg/rytec.xml" }
+            if (auswahl.eigenerLink && zusatz.isNotBlank()) {
+                if (extraGeladenVon.isNotEmpty() && extraGeladenVon != zusatz) {
+                    XmltvEpg.clearFiles(app)   // andere Adresse -> alter Index passt nicht mehr
+                }
+                val ok = runCatching { XmltvEpg.ensureExtraLoaded(app, zusatz, force) }.getOrDefault(false)
+                extraGeladenVon = if (ok) zusatz else ""
+                meldungen += if (ok) {
+                    if (XmltvEpg.isExtraFresh()) "Eigener Link: aktuell" else "Eigener Link: ohne aktuelle Daten"
+                } else "Eigener Link: Fehler"
+            } else if (!auswahl.eigenerLink) {
+                meldungen += "Eigener Link: aus"
+            }
+
+            // 3. freies epg.pw
+            if (auswahl.epgpw) {
+                val ok = runCatching { XmltvEpg.loadFallback(app, force) }.getOrDefault(false)
+                withContextMain { fallbackReady.value = ok }
+                meldungen += if (ok && XmltvEpg.isFallbackFresh()) "epg.pw: aktuell"
+                else if (ok) "epg.pw: ohne aktuelle Daten" else "epg.pw: Fehler"
+            } else {
+                meldungen += "epg.pw: aus"
+            }
+
+            val stand = meldungen.joinToString(" · ")
+            android.util.Log.d("SmartysIPTV", "EPG: $stand")
+            withContextMain {
+                epgStatus.value = stand
+                epgBusy.value = false
+            }
+        }
+    }
+
+    /** Einstellungen: EPG-Auswahl speichern und sofort neu laden. */
+    fun setzeEpgAuswahl(a: EpgPrefs.Auswahl, eigeneUrl: String? = null) {
+        val app = getApplication<android.app.Application>()
+        EpgPrefs.schreiben(app, a)
+        if (eigeneUrl != null) EpgPrefs.eigeneUrlSchreiben(app, eigeneUrl)
+        loadXmltvEpg(force = true)
+    }
+
+    val xmltvReady = mutableStateOf(false)
+    val fallbackReady = mutableStateOf(false)
+
+    /**
+     * "Jetzt"-EPG für einen Kanal. Reihenfolge der Quellen:
+     * 1. Provider-XMLTV per tvg-id  — nur wenn dessen Daten nicht abgelaufen sind
+     * 2. eigener EPG-Link aus dem Panel (z. B. Receiver) per Kanalname
+     * 3. freies epg.pw-EPG per normalisiertem Kanalname
+     */
+    fun nowNext(ch: LiveStream): Pair<XmltvProgramme?, XmltvProgramme?> =
+        XmltvEpg.bestNowAndNext(ch.epgChannelId, ch.name)
+
+    private fun decodeB64(s: String): String? = try {
+        val decoded = android.util.Base64.decode(s.trim(), android.util.Base64.DEFAULT)
+        String(decoded, Charsets.UTF_8).trim()
+    } catch (e: Exception) { s }
+
+    private fun fmtTime(xt: String): String = try {
+        // "2026-09-26 08:55:00" -> "08:55"
+        xt.split(" ").getOrNull(1)?.take(5) ?: xt
+    } catch (e: Exception) { xt }
+
+    fun login(url: String, user: String, pass: String, onResult: (Boolean, String?) -> Unit) {
+        android.util.Log.d("SmartysIPTV", "login() gestartet: url=$url user=$user")
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val clean = url.trim().trimEnd('/')
+                android.util.Log.d("SmartysIPTV", "baue Retrofit für $clean")
+                val retrofit = Retrofit.Builder()
+                    .baseUrl("$clean/")
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build()
+                val testApi = retrofit.create(XtreamApi::class.java)
+
+                val auth = withTimeout(12000) { testApi.auth(user, pass) }
+                android.util.Log.d("SmartysIPTV", "auth ok: status=${auth.userInfo.status} user=${auth.userInfo.username}")
+                if (auth.userInfo.username != user) {
+                    withContextMain { onResult(false, "Panel antwortete, aber Login fehlgeschlagen") }
+                    return@launch
+                }
+                val status = auth.userInfo.status
+                if (status != null && status.lowercase() !in listOf("active", "trial")) {
+                    withContextMain { onResult(false, "Abo-Status: $status") }
+                    return@launch
+                }
+
+                // OkHttp mit vernünftigen Timeouts fürs Streaming-Setup
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(20, TimeUnit.SECONDS)
+                    .build()
+                val fullApi = Retrofit.Builder()
+                    .baseUrl("$clean/")
+                    .client(client)
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build()
+                    .create(XtreamApi::class.java)
+
+                api = fullApi
+                CredStore.saveAll(getApplication(), listOf(CredStore.Creds(clean, user, pass)))
+                creds = CredStore.Creds(clean, user, pass)
+                allProviders = listOf(creds!!)
+                apis = listOf(fullApi)
+                loadContent()
+                withContextMain { onResult(true, null) }
+            } catch (e: Exception) {
+                android.util.Log.e("SmartysIPTV", "login fehlgeschlagen", e)
+                withContextMain {
+                    onResult(false, "Keine Verbindung: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun restoreSession() {
+        val providers = CredStore.loadAll(getApplication())
+        android.util.Log.w("SmartysIPTV", "restoreSession: ${providers.size} Lines gespeichert")
+        if (providers.isEmpty()) {
+            state = AppState.NeedsLogin
+            return
+        }
+        allProviders = providers
+        apis = providers.map { buildApi(it) }
+        // Profil-Bindung: die zugeordnete Line ist die primaere.
+        val bound = boundProviderIndex() ?: 0
+        creds = providers.getOrNull(bound) ?: providers.first()
+        api = apis.getOrNull(bound) ?: apis.firstOrNull()
+        loadContent()
+        favorites = getPrefs().getStringSet("favorites", emptySet()) ?: emptySet()
+        lastWatched = getPrefs().getString("last_watched", null)
+        loadRecent()
+        reloadWatchlist()
+    }
+
+    /** Pairing-/Unlock-Screen anzeigen (z. B. wenn neu geladene Lines
+     *  verschluesselt sind und das Sicherheits-Passwort fehlt). */
+    fun requestPairingScreen() {
+        state = AppState.NeedsLogin
+    }
+
+    // ---------- Profil -> Panel-Line ----------
+
+    /** Index der Line, die am aktiven Profil haengt (null = nicht gebunden). */
+    fun boundProviderIndex(): Int? {
+        val pid = ProfileStore.activeId(getApplication()) ?: return null
+        val key = ProfileStore.lineKey(getApplication(), pid) ?: return null
+        val idx = allProviders.indexOfFirst { it.key == key }
+        return if (idx >= 0) idx else null
+    }
+
+    /** Anzeigename einer Line fuer die Auswahl. */
+    private fun lineLabel(c: CredStore.Creds, idx: Int): String {
+        val host = c.url.removePrefix("http://").removePrefix("https://").trimEnd('/')
+        return if (c.user.isBlank()) "Line ${idx + 1} · $host"
+        else "Line ${idx + 1} · $host (${c.user})"
+    }
+
+    /** Alle Lines fuer die Auswahl in den Einstellungen. */
+    fun lines(): List<Pair<Int, String>> = allProviders.mapIndexed { i, c -> i to lineLabel(c, i) }
+
+    /** Name der Line, die an einem Profil haengt (null = "Automatisch"). */
+    fun lineLabelFor(profileId: String): String? {
+        val key = ProfileStore.lineKey(getApplication(), profileId) ?: return null
+        val idx = allProviders.indexOfFirst { it.key == key }
+        if (idx < 0) return null
+        return lineLabel(allProviders[idx], idx)
+    }
+
+    /** Profil an eine Line binden (index = null -> "Automatisch"). */
+    fun setProfileLine(profileId: String, index: Int?) {
+        ProfileStore.setLineKey(
+            getApplication(), profileId,
+            index?.let { allProviders.getOrNull(it)?.key }
+        )
+        if (profileId == ProfileStore.activeId(getApplication())) applyActiveLine()
+    }
+
+    /** Aktive Line aus der Profil-Bindung setzen und Inhalte neu laden. */
+    fun applyActiveLine() {
+        val idx = boundProviderIndex() ?: 0
+        val p = allProviders.getOrNull(idx) ?: return
+        val changed = creds?.key != p.key
+        creds = p
+        api = apis.getOrNull(idx) ?: apis.firstOrNull()
+        loadContent()
+        loadVod()
+        loadSeries()
+        android.util.Log.i("SmartysIPTV", "Profil-Line aktiv: $idx (${lineLabel(p, idx)}) gewechselt=$changed")
+    }
+
+    private fun buildApi(c: CredStore.Creds): XtreamApi {
+        val client = okhttp3.OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+        return Retrofit.Builder()
+            .baseUrl("${c.url}/")
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(XtreamApi::class.java)
+    }
+
+    private fun loadContent() {
+        android.util.Log.w("SmartysIPTV", "loadContent: START, providers=${allProviders.size}")
+        state = AppState.Loading
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val providers = allProviders
+                if (providers.isEmpty()) return@launch
+                val all = mutableListOf<LiveStream>()
+                val allCats = mutableListOf<Category>()
+                // Ist das Profil an eine Line gebunden, nur diese laden.
+                val boundIdx = boundProviderIndex()
+                providers.forEachIndexed { idx, c ->
+                    if (boundIdx != null && idx != boundIdx) return@forEachIndexed
+                    val a = apis.getOrNull(idx) ?: return@forEachIndexed
+                    val cats = withTimeout(30000) { a.liveCategories(c.user, c.pass) }
+                    val streams = withTimeout(60000) { a.liveStreams(c.user, c.pass) }
+                    val catNames = cats.associate { it.id to it.name }
+                    streams.forEach {
+                        it.categoryName = catNames[it.categoryId] ?: ""
+                        it.providerIndex = idx
+                    }
+                    all.addAll(streams)
+                    allCats.addAll(cats)
+                }
+
+                // Marker/Fake-Einträge rausfiltern (z.B. "##### DE ALLGEMEINES #####")
+                // und ausgeblendete Gruppen gar nicht erst in den Zustand uebernehmen:
+                // was der Nutzer ausgeblendet hat, soll auch nicht im Speicher liegen.
+                val hiddenLive = CategoryPrefs.hiddenIds("live")
+                val clean = all.filter { !it.name.contains("####") && it.categoryId !in hiddenLive }
+                val catsClean = allCats.filter { it.id !in hiddenLive }
+                channelsCache = clean
+                withContextMain {
+                    state = AppState.Ready(catsClean, clean)
+                }
+                // VOD und Serien HIER anstossen, nicht in der UI.
+                // Startet die App direkt im Player (oder wird der Haupt-Screen
+                // nie komponiert), lief der LaunchedEffect dort nie — Filme und
+                // Serien blieben leer, ohne jede Meldung.
+                loadVod()
+                loadSeries()
+                // XMLTV-EPG des (ersten) Providers laden
+                loadXmltvEpg()
+            } catch (e: Exception) {
+                withContextMain {
+                    state = AppState.Error("Kanäle laden fehlgeschlagen: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun retry() = loadContent()
+
+    fun toggleFavorite(streamId: String) {
+        favorites = if (streamId in favorites) favorites - streamId else favorites + streamId
+        getPrefs().edit().putStringSet("favorites", favorites).apply()
+    }
+
+    fun markWatched(streamId: String) {
+        lastWatched = streamId
+        getPrefs().edit().putString("last_watched", streamId).apply()
+        recentIds = (listOf(streamId) + recentIds.filter { it != streamId }).take(10)
+        getPrefs().edit().putString("recent_ids", recentIds.joinToString(",")).apply()
+    }
+
+    private fun loadRecent() {
+        recentIds = getPrefs().getString("recent_ids", null)
+            ?.split(',')?.filter { it.isNotBlank() }?.take(10) ?: emptyList()
+    }
+
+    /** Liest profilgebundene Favoriten/Zuletzt-gesehen nach einem Profilwechsel neu. */
+    fun reloadProfileState() {
+        favorites = getPrefs().getStringSet("favorites", emptySet()) ?: emptySet()
+        lastWatched = getPrefs().getString("last_watched", null)
+        loadRecent()
+        // Profilwechsel: die Merkliste gehoert dem Profil, nicht dem Geraet.
+        reloadWatchlist()
+    }
+
+    fun logout(ctx: Context) {
+        CredStore.clear(ctx)
+        creds = null
+        api = null
+        allProviders = emptyList()
+        apis = emptyList()
+        state = AppState.NeedsLogin
+    }
+
+    // ---------- Backend-Integration (Status, Lizenz, Support) ----------
+
+    /** Fragt den Player-Status ab: (existiert, freigeschaltet). NIEMALS das Passwort. */
+    fun fetchPlayerStatus(playerId: String): Pair<Boolean, Boolean>? = runCatching {
+        val url = java.net.URL("https://panel.smartys.tech/api/v1/player/info?mac=$playerId")
+        val conn = url.openConnection() as javax.net.ssl.HttpsURLConnection
+        conn.connectTimeout = 5000; conn.readTimeout = 5000
+        if (conn.responseCode != 200) return@runCatching null
+        val body = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        Pair(body.optBoolean("exists"), body.optBoolean("active"))
+    }.getOrNull()
+
+    /**
+     * IBPlayer-Flow: Pairing mit panel.smartys.tech (Player registriert sich
+     * beim ersten Aufruf selbst), dann zugewiesene Playlist laden und einloggen.
+     * Rückgabe true = Kanäle geladen (state -> Ready/Loading), false = noch
+     * keine Playlist hinterlegt oder Backend nicht erreichbar.
+     */
+    fun pairAndLoad(playerId: String, pairingPw: String): Boolean = runCatching {
+        val url = java.net.URL("https://panel.smartys.tech/api/v1/pair")
+        val conn = url.openConnection() as javax.net.ssl.HttpsURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.connectTimeout = 8000; conn.readTimeout = 8000
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        conn.outputStream.use {
+            it.write("mac=${java.net.URLEncoder.encode(playerId, "UTF-8")}&password=${java.net.URLEncoder.encode(pairingPw, "UTF-8")}".toByteArray())
+        }
+        if (conn.responseCode != 200) return@runCatching false
+        val body = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+        val token = body.getString("token")
+        // Provider-Liste des Players abrufen:
+        val purl = java.net.URL("https://panel.smartys.tech/api/v1/providers")
+        val pconn = purl.openConnection() as javax.net.ssl.HttpsURLConnection
+        pconn.setRequestProperty("Authorization", "Bearer $token")
+        pconn.connectTimeout = 8000; pconn.readTimeout = 8000
+        if (pconn.responseCode != 200) return@runCatching false
+        val respBody = org.json.JSONObject(pconn.inputStream.bufferedReader().readText())
+        // VERSCHLÜSSELTE Line (Panel-Workflow, wie Desktop/Enigma):
+        // {encrypted:true, name, salt, iterations, kdf, providers:[
+        //   {id,label, cipher_server_url, cipher_username, cipher_password, cipher_epg_url}]}
+        // => kein Klartext abrufbar; UI fragt das Sicherheits-Passwort ab.
+        if (respBody.optBoolean("encrypted")) {
+            val arrEnc = respBody.optJSONArray("providers") ?: org.json.JSONArray()
+            pendingPlayerId = playerId
+            pendingSaltB64 = respBody.optString("salt")
+            pendingIterations = respBody.optInt("iterations", 310_000)
+            pendingCiphers = (0 until arrEnc.length()).map { i ->
+                val p = arrEnc.getJSONObject(i)
+                SecCrypto.SecProvider(
+                    label = p.optString("label"),
+                    cipherServerUrl = p.optString("cipher_server_url"),
+                    cipherUsername = p.optString("cipher_username"),
+                    cipherPassword = p.optString("cipher_password"),
+                    cipherEpgUrl = p.optString("cipher_epg_url")
+                )
+            }.filter { it.cipherServerUrl.isNotBlank() }
+            unlockError = ""
+            unlockNeeded = true
+            android.util.Log.d("SmartysIPTV", "panel: verschlüsselte Line empfangen (${pendingCiphers.size} Provider) — Sicherheits-Passwort nötig")
+            return@runCatching false   // noch nicht fertig: UI fragt Passwort ab
+        }
+        // Backend liefert {name, providers:[{id,label,server_url,username,password,...}]}
+        val providersArr = respBody.optJSONArray("providers") ?: org.json.JSONArray()
+        if (providersArr.length() == 0) return@runCatching false
+        val providers = (0 until providersArr.length()).map { i ->
+            val p = providersArr.getJSONObject(i)
+            CredStore.Creds(
+                p.optString("server_url"),
+                p.optString("username"),
+                p.optString("password"),
+                p.optString("epg_url", "")
+            )
+        }.filter { it.url.isNotBlank() && it.user.isNotBlank() }
+        if (providers.isEmpty()) return@runCatching false
+        unlockNeeded = false
+        unlockError = ""
+        // Speichern + als normale Session weitermachen:
+        CredStore.saveAll(getApplication(), providers)
+        creds = providers.first()
+        allProviders = providers
+        apis = providers.map { buildApi(it) }
+        api = apis.firstOrNull()
+        loadContent()
+        true
+    }.getOrDefault(false)
+
+    /**
+     * Entschlüsselt die ausstehende Panel-Line mit dem Sicherheits-Passwort
+     * (PBKDF2-HMAC-SHA256 + AES-256-GCM, AAD = "smartys-iptv-sec:"+Player-ID;
+     * identisch zu backend/crypto.py, Desktop-SecCrypto, Enigma-crypto.py).
+     * Erfolg -> plain in RAM (Session) + auf Platte (CredStore/EncryptedPrefs),
+     * d. h. beim nächsten Start läuft die App OHNE Passwort (wie Desktop/Enigma).
+     * Falsches Passwort -> false + unlockError, Line bleibt verschlüsselt.
+     */
+    fun unlockLine(password: String): Boolean {
+        if (pendingSaltB64.isEmpty()) return false
+        val provs = try {
+            val key = SecCrypto.deriveKey(password, pendingSaltB64, pendingIterations)
+            pendingCiphers.mapNotNull { p ->
+                val url = SecCrypto.decryptField(key, p.cipherServerUrl, pendingPlayerId)
+                val user = SecCrypto.decryptField(key, p.cipherUsername, pendingPlayerId)
+                val pass = SecCrypto.decryptField(key, p.cipherPassword, pendingPlayerId)
+                val epg = if (p.cipherEpgUrl.isBlank()) "" else
+                    runCatching { SecCrypto.decryptField(key, p.cipherEpgUrl, pendingPlayerId) }
+                        .getOrDefault("")
+                if (url.isNotBlank() && user.isNotBlank()) CredStore.Creds(url, user, pass, epg) else null
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("SmartysIPTV", "unlockLine: Entschluesselung fehlgeschlagen", e)
+            emptyList()
+        }
+        if (provs.isEmpty()) {
+            unlockError = "❌ Passwort falsch — die Line bleibt verschlüsselt."
+            return false
+        }
+        // RAM: Session setzen, damit Kanäle/Streams sofort geladen werden
+        creds = provs.first()
+        allProviders = provs
+        apis = provs.map { buildApi(it) }
+        api = apis.firstOrNull()
+        // Platte: plain in den Encrypted-Prefs — nächster Start ohne Passwort
+        CredStore.saveAll(getApplication(), provs)
+        android.util.Log.d("SmartysIPTV", "Line entschlüsselt: ${provs.size} Provider, plain gespeichert")
+        unlockError = ""
+        pendingSaltB64 = ""
+        pendingCiphers = emptyList()
+        loadContent()
+        return true
+    }
+
+    /** Sendet Support-Anfrage ans Backend (landet als Mail beim Admin). */
+    fun sendSupport(mac: String, message: String): Boolean = runCatching {
+        val payload = org.json.JSONObject()
+            .put("mac", mac)
+            .put("message", message)
+            .put("app_version", "0.2")
+        val conn = java.net.URL("https://panel.smartys.tech/api/v1/support")
+            .openConnection() as javax.net.ssl.HttpsURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.connectTimeout = 8000; conn.readTimeout = 8000
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.outputStream.use { it.write(payload.toString().toByteArray()) }
+        conn.responseCode == 200
+    }.getOrDefault(false)
+
+    /** Leert den EPG-Speicher (nach Cache-Löschung aus den Einstellungen). */
+    fun clearEpg() {
+        xmltvReady.value = false
+        XmltvEpg.clearCache()
+    }
+
+    private fun getPrefs(): SharedPreferences {
+        val app = getApplication<Application>()
+        val pid = ProfileStore.activeId(app) ?: "default"
+        return app.getSharedPreferences("smartys_iptv_state__$pid", Context.MODE_PRIVATE)
+    }
+
+    private suspend fun <T> withContextMain(block: () -> T) =
+        kotlinx.coroutines.withContext(Dispatchers.Main) { block() }
+}

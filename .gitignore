@@ -1,0 +1,38 @@
+
+*.apk
+app/build/
+*.AppImage
+backups/
+*/build/
+build/
+# ---------- Build-Artefakte ----------
+data/
+.DS_Store
+.env
+.env.*
+!.env.example
+.gradle/
+gradle-8.14.3/
+.gradle-cache/
+.hermes/
+.idea/
+*.iml
+# Interne Notizen/Pläne gehören nicht ins öffentliche Repo
+*.ipk
+*.jks
+*.key
+*.keystore
+keystore.properties
+.kotlin/
+local.properties
+*.log
+# ---------- Logs / Cache ----------
+# ---------- Lokale Gradle-Distribution (Wrapper nicht eingecheckt) ----------
+# ---------- Maschinenspezifisch ----------
+*.pem
+*.pyc
+__pycache__/
+# ---------- Quellen-Backups (lokale tgz-Snapshots, nie einchecken) ----------
+*.rpm
+# ---------- Secrets / Runtime-Daten (NIE committen!) ----------
+*.tar.gz
