@@ -16,7 +16,7 @@ object KameraPrefs {
     private var p: SharedPreferences? = null
 
     /** Server des CamViewer-Backends im Buero (go2rtc/Protect-Proxy). */
-    const val FIRMA_SERVER_STANDARD = ""   // oeffentliche Fassung: kein Firmenserver fest eincodiert
+    const val FIRMA_SERVER_STANDARD = BuildConfig.FIRMA_SERVER
 
     fun init(ctx: Context) {
         if (p == null) p = ctx.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)

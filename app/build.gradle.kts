@@ -23,16 +23,26 @@ android {
     }
 
     flavorDimensions += "target"
+// Firmenserver-Adresse kommt aus firma.properties (NICHT versioniert).
+// Oeffentliche Builds haben damit keine Adresse, lokale Builds schon.
+val firmaServer: String = (rootProject.file("firma.properties")
+    .takeIf { it.exists() }
+    ?.readLines()
+    ?.firstOrNull { it.trim().startsWith("firma_server=") }
+    ?.substringAfter("=")
+    ?.trim()) ?: ""
+
     productFlavors {
         // FireTV / Android TV: unverändert wie bisher (v0.8.6, EncryptedSharedPreferences).
         create("tv") {
             dimension = "target"
             applicationId = "com.smartys.iptv"
-            versionCode = 63
-            versionName = "0.8.44"
+            versionCode = 69
+            versionName = "0.8.50"
             buildConfigField("boolean", "USE_KEYSTORE_STORE", "false")
             buildConfigField("boolean", "USE_PBKDF2_FALLBACK", "true")
             buildConfigField("boolean", "LITE_DEVICE", "false")
+            buildConfigField("String", "FIRMA_SERVER", "\"$firmaServer\"")
             manifestPlaceholders["appName"] = "Smarty Player"
         }
         // Handy (Android 16): eigene App-ID, Keystore-Speicher (Crash-Fix).

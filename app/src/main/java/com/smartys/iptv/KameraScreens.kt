@@ -1,5 +1,9 @@
 package com.smartys.iptv
 
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -291,10 +295,28 @@ fun KameraWand(
     BackHandler { onBack() }
     androidx.compose.runtime.DisposableEffect(Unit) {
         keepScreenOn(ctx, true)
-        onDispose { keepScreenOn(ctx, false) }
+        // Kamera-Stroeme sind stumm und haben keine Tonspur. Ohne angemeldete
+        // Wiedergabe haelt Fire OS das Geraet fuer unt taetig und schickt den
+        // Fernseher nach rund 20 Minuten per CEC in Standby.
+        val wach = wachHalten(ctx)
+        onDispose {
+            keepScreenOn(ctx, false)
+            wach()
+        }
     }
 
     val spalten = layout.spalten.coerceIn(1, 6)
+    // Raster-Modus (v0.8.48): Server setzt alle Kameras zu EINEM Stream zusammen.
+    var raster by remember { mutableStateOf(false) }
+
+    // Basis-Adresse aus den geladenen Kameras ableiten: prefs 'server' ist
+    // nicht immer gesetzt (LAN-Suche, Profile) - dann waere die URL relativ
+    // und der Player fordert nie etwas an (am Cube gemessen: 0 Zugriffe).
+    val rasterUrl = remember(kameras) {
+        val k0 = kameras.firstOrNull { it.typ == "hls" && it.url.contains("/hls/") }
+        val basis = k0?.url?.substringBefore("/hls/") ?: ((Kameras.server() ?: "").trimEnd('/'))
+        if (basis.isBlank()) "" else basis + "/hls/wall/index.m3u8"
+    }
     val geordnet = remember(kameras, layout) {
         kameras.sortedBy { k -> layout.reihenfolge.indexOf(k.id).let { i -> if (i < 0) 999 else i } }
     }
@@ -314,7 +336,17 @@ fun KameraWand(
         Modifier.fillMaxSize().background(Color.Black).padding(18.dp)
             // onPreviewKeyEvent liest nur mit und laesst die Taste weiterlaufen (false),
             // dadurch bleibt die Fokus-Navigation der Fernbedienung erhalten.
-            .onPreviewKeyEvent { _ -> leiste = true; false }
+            // MENU/INFO schaltet den Raster direkt (die Bedienleiste blendet nach
+            // 6 s aus, ein Knopf darin ist per Fernbedienung nicht zuverlaessig
+            // erreichbar - am Cube gemessen). Alle anderen Tasten zeigen die Leiste.
+            .onPreviewKeyEvent { ev ->
+                val k = ev.key
+                if (ev.type == KeyEventType.KeyDown &&
+                    (k == Key.Menu || k == Key.Info)) {
+                    raster = !raster
+                    true
+                } else { leiste = true; false }
+            }
     ) {
         if (leiste) Row(verticalAlignment = Alignment.CenterVertically) {
             WandKnopf(text = "← Zurück", aktiv = false) { onBack() }
@@ -331,11 +363,25 @@ fun KameraWand(
                 Spacer(Modifier.width(4.dp))
             }
             Spacer(Modifier.width(10.dp))
+            WandKnopf(text = if (raster) "Raster: AN" else "Raster (1 Stream)", aktiv = raster) {
+                raster = !raster
+            }
+            Spacer(Modifier.width(10.dp))
             Text("${geordnet.size} Kameras", color = KamMid, fontSize = 13.sp)
         }
         if (leiste) Spacer(Modifier.height(12.dp))
         // maxHeight ist hier der Platz UNTER der Kopfzeile — kein fester Abzug,
         // damit die Wand unabhaengig von TV-Dichte und Schriftgroesse passt.
+        if (raster && rasterUrl.isNotBlank()) {
+            WandRasterFeld(
+                url = rasterUrl,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        } else if (raster) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text("Kein Kamera-Server bekannt", color = KamMid, fontSize = 14.sp)
+            }
+        } else
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f)) {
         val luecke = 8.dp
         val zeilen = remember(geordnet, layout, spalten) {
@@ -608,5 +654,102 @@ fun KameraWandLaden(onBack: () -> Unit) {
         }
     } else {
         KameraWand(kameras, layout, onBack, onOeffnen = { /* Klick oeffnet spaeter Vollbild */ }, onLayout = { speichern(it) })
+    }
+}
+
+/**
+ * Meldet dem System eine laufende Wiedergabe an, damit Fire OS nicht in den
+ * Standby geht (Kamera-Stroeme sind stumm und haben keine Tonspur).
+ * Gibt die Aufraeum-Funktion zurueck.
+ */
+private fun wachHalten(ctx: android.content.Context): () -> Unit {
+    var session: android.media.session.MediaSession? = null
+    var lock: android.os.PowerManager.WakeLock? = null
+    runCatching {
+        val s = android.media.session.MediaSession(ctx.applicationContext, "SmartysKameraWand")
+        s.setFlags(android.media.session.MediaSession.FLAG_HANDLES_MEDIA_BUTTONS)
+        val st = android.media.session.PlaybackState.Builder()
+            .setState(android.media.session.PlaybackState.STATE_PLAYING, 0L, 1f)
+            .setActions(android.media.session.PlaybackState.ACTION_PLAY)
+            .build()
+        s.setPlaybackState(st)
+        s.isActive = true
+        session = s
+    }
+    // Unhoerbarer 19-Hz-Ton in Schleife: haelt die Audioausgabe aktiv, damit der
+    // Fernseher nicht per CEC in Standby geht. Kamera-Stroeme selbst sind stumm.
+    var ton: android.media.MediaPlayer? = null
+    runCatching {
+        ton = android.media.MediaPlayer.create(ctx.applicationContext, R.raw.wand_ton).also {
+            it.isLooping = true
+            it.setVolume(0.02f, 0.02f)
+            it.start()
+        }
+    }
+    runCatching {
+        val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE)
+            as android.os.PowerManager
+        lock = pm.newWakeLock(
+            android.os.PowerManager.PARTIAL_WAKE_LOCK,
+            "SmartysIPTV:KameraWand"
+        ).also { it.acquire(12 * 60 * 60 * 1000L) }
+    }
+    return {
+        runCatching { ton?.stop(); ton?.release() }
+        runCatching { lock?.takeIf { it.isHeld }?.release() }
+        runCatching { session?.isActive = false; session?.release() }
+        Unit
+    }
+}
+
+/**
+ * Raster-Modus: der Server (pc-papa) setzt die Kameras per ffmpeg-xstack zu
+ * EINEM HLS-Stream zusammen. Ein Decoder statt fuenf — genau das, was der Cube
+ * an Hardware-Decodern hat. Der Stream fuehrt einen 21,5-kHz-Ton (~-60 dB,
+ * unhoerbar), damit Fire OS und HDMI-Geraete ein laufendes Tonsignal sehen und
+ * nicht abschalten; deshalb volume 1 statt 0.
+ */
+@androidx.compose.runtime.Composable
+private fun WandRasterFeld(url: String, modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    val exo = remember(url) {
+        androidx.media3.exoplayer.ExoPlayer.Builder(ctx).build().apply {
+            volume = 1f
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(url))
+            prepare()
+            playWhenReady = true
+        }
+    }
+    var bildDa by remember(url) { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(exo) {
+        val horcher = object : androidx.media3.common.Player.Listener {
+            override fun onRenderedFirstFrame() { bildDa = true }
+        }
+        exo.addListener(horcher)
+        onDispose { exo.removeListener(horcher); exo.release() }
+    }
+    // Waechter: steht das Bild (Segmentabriss), denselben Player neu anstossen.
+    var letztePos by remember(url) { mutableStateOf(-1L) }
+    LaunchedEffect(exo) {
+        while (true) {
+            delay(15_000)
+            val pos = runCatching { exo.currentPosition }.getOrDefault(-1L)
+            if (pos == letztePos) runCatching { exo.prepare(); exo.play() }
+            letztePos = pos
+        }
+    }
+    Box(modifier.background(Color.Black), contentAlignment = Alignment.Center) {
+        AndroidView(
+            factory = { c ->
+                androidx.media3.ui.PlayerView(c).apply {
+                    player = exo
+                    useController = false
+                    isFocusable = false
+                    descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+        if (!bildDa) Text("Raster lädt …", color = KamMid, fontSize = 14.sp)
     }
 }

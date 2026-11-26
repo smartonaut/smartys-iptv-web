@@ -36,3 +36,4 @@ __pycache__/
 *.rpm
 # ---------- Secrets / Runtime-Daten (NIE committen!) ----------
 *.tar.gz
+firma.properties
